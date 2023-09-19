@@ -1,21 +1,8 @@
-"""
-SQL Alchemy models declaration.
-https://docs.sqlalchemy.org/en/14/orm/declarative_styles.html#example-two-dataclasses-with-declarative-table
-Dataclass style for powerful autocompletion support.
+# app/models.py
 
-https://alembic.sqlalchemy.org/en/latest/tutorial.html
-Note, it is used by alembic migrations logic, see `alembic/env.py`
-
-Alembic shortcuts:
-# create migration
-alembic revision --autogenerate -m "migration_name"
-
-# apply all migrations
-alembic upgrade head
-"""
 import uuid
 
-from sqlalchemy import String
+from sqlalchemy import ForeignKey, Integer, String
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
@@ -34,3 +21,27 @@ class User(Base):
         String(254), nullable=False, unique=True, index=True
     )
     hashed_password: Mapped[str] = mapped_column(String(128), nullable=False)
+
+
+class Word(Base):
+    __tablename__ = "word_model"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[str] = mapped_column(
+        ForeignKey("user_model.id", ondelete="CASCADE"),
+    )
+    word_form: Mapped[str] = mapped_column(String(50), nullable=False)
+    word_translation: Mapped[str] = mapped_column(String(150), nullable=False)
+
+
+class Sentence(Base):
+    __tablename__ = "clicked_sentence_model"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[str] = mapped_column(
+        ForeignKey("user_model.id", ondelete="CASCADE"),
+    )
+    word_id: Mapped[str] = mapped_column(
+        ForeignKey("word_model.id", ondelete="CASCADE"),
+    )
+    clicked_sentence: Mapped[str] = mapped_column(String(300), nullable=False)
