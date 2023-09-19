@@ -3,3 +3,4 @@ watch-backend/.env.example
 watch-backend/.env
 watch-backend/.idea/
 watch-backend/.DS_Store
+.DS_Store
