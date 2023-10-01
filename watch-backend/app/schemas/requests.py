@@ -17,3 +17,7 @@ class UserUpdatePasswordRequest(BaseRequest):
 class UserCreateRequest(BaseRequest):
     email: EmailStr
     password: str
+
+
+class VideoRequest(BaseRequest):
+    video_url: str

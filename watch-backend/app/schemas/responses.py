@@ -18,3 +18,8 @@ class AccessTokenResponse(BaseResponse):
 class UserResponse(BaseResponse):
     id: str
     email: EmailStr
+
+
+class VideoResponse(BaseResponse):
+    id: int
+    video_id: str

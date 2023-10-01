@@ -23,24 +23,26 @@ class User(Base):
     hashed_password: Mapped[str] = mapped_column(String(128), nullable=False)
 
 
+class Video(Base):
+    __tablename__ = "video_model"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    video_url: Mapped[str] = mapped_column(String(250), nullable=False)
+    video_id: Mapped[str] = mapped_column(String(30), nullable=False)
+
+
 class Word(Base):
     __tablename__ = "word_model"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    user_id: Mapped[str] = mapped_column(
-        ForeignKey("user_model.id", ondelete="CASCADE"),
-    )
     word_form: Mapped[str] = mapped_column(String(50), nullable=False)
     word_translation: Mapped[str] = mapped_column(String(150), nullable=False)
 
 
 class Sentence(Base):
-    __tablename__ = "clicked_sentence_model"
+    __tablename__ = "sentence_model"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    user_id: Mapped[str] = mapped_column(
-        ForeignKey("user_model.id", ondelete="CASCADE"),
-    )
     word_id: Mapped[str] = mapped_column(
         ForeignKey("word_model.id", ondelete="CASCADE"),
     )

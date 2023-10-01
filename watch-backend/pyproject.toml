@@ -15,6 +15,13 @@ asyncpg = "^0.27.0"
 passlib = {extras = ["bcrypt"], version = "^1.7.4"}
 pydantic = {extras = ["dotenv", "email"], version = "^2.3"}
 pydantic-settings = "^2.0.3"
+pytube = "^15.0.0"
+yt-dlp = "^2023.9.24"
+youtube-transcript-api = "^0.6.1"
+srt = "^3.5.3"
+webvtt-py = "^0.4.6"
+nltk = "^3.8.1"
+vtt-to-srt3 = "^0.2.0.1"
 
 [tool.poetry.group.dev.dependencies]
 autoflake = "^2.0.1"
