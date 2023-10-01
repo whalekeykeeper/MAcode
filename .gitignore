@@ -4,3 +4,5 @@ watch-backend/.env
 watch-backend/.idea/
 watch-backend/.DS_Store
 .DS_Store
+watch-backend/alembic/versions/
+watch-backend/app/core/static/
