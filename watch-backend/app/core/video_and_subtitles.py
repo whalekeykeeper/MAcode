@@ -3,8 +3,10 @@ from yt_dlp import YoutubeDL
 from youtube_transcript_api import YouTubeTranscriptApi
 import os
 from pytube import extract
-from typing import List, Dict
-from .bilingual_vtt import create_bilingual_vtt
+from app.core.bilingual_vtt import create_bilingual_vtt
+
+Element = list[dict[str, str | float]]
+Transcript = dict[str, list[dict[str, str | float]]]
 
 
 def get_bilingual_vtt(video_url: str) -> None:
@@ -59,7 +61,7 @@ def __download_youtube_video(video_id: str, video_url: str) -> None:
         ydl.download([video_url])
 
 
-def __download_subtitles(video_id: str) -> Dict[str, List[Dict[str, str | float]]]:
+def __download_subtitles(video_id: str) -> Transcript:
     """
     A function to download subtitles of a YouTube video
     """
@@ -82,8 +84,8 @@ def __download_subtitles(video_id: str) -> Dict[str, List[Dict[str, str | float]
     return transcripts
 
 
-def __save_subtitle(video_id: str, lan_code: str, data: List[Dict[str, str | float]],
-                    transcripts: Dict[str, List[Dict[str, str | float]]]) -> Dict[str, List[Dict[str, str | float]]]:
+def __save_subtitle(video_id: str, lan_code: str, data: Element,
+                    transcripts: Transcript) -> Transcript:
     transcripts[lan_code] = data
     vtt = __convert_to_vtt(data)
     output_file_path = os.path.join(os.getcwd() + "/static/" + video_id, video_id + "." + lan_code + ".vtt")
@@ -94,7 +96,7 @@ def __save_subtitle(video_id: str, lan_code: str, data: List[Dict[str, str | flo
     return transcripts
 
 
-def __convert_to_vtt(data: List[Dict[str, str | float]]) -> str:
+def __convert_to_vtt(data: Element) -> str:
     vtt_content = "WEBVTT\n\n"
 
     for item in data:

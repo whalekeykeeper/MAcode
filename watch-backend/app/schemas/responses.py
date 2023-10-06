@@ -23,3 +23,15 @@ class UserResponse(BaseResponse):
 class VideoResponse(BaseResponse):
     id: int
     video_id: str
+
+
+class TranslationResponse(BaseResponse):
+    id: int
+    word: str
+    sentence: str
+    translation: str
+
+
+class StatisticsResponse(BaseResponse):
+    number_sentences: int
+    number_words: int

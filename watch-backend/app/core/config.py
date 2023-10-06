@@ -21,6 +21,8 @@ See https://pydantic-docs.helpmanual.io/usage/settings/
 Note, complex types like lists are read as json-encoded strings.
 """
 
+import openai
+
 import tomllib
 from functools import cached_property
 from pathlib import Path
@@ -63,6 +65,10 @@ class Settings(BaseSettings):
     TEST_DATABASE_PORT: int = 5432
     TEST_DATABASE_DB: str = "postgres"
 
+    # OpenAI setting
+    OPENAI_API_KEY: str
+    OPENAI_ORGANIZATION: str
+
     # FIRST SUPERUSER
     FIRST_SUPERUSER_EMAIL: EmailStr
     FIRST_SUPERUSER_PASSWORD: str
@@ -101,3 +107,7 @@ class Settings(BaseSettings):
 
 
 settings: Settings = Settings()  # type: ignore
+
+# OpenAI setting
+openai.organization = settings.OPENAI_ORGANIZATION
+openai.api_key = settings.OPENAI_API_KEY

@@ -31,19 +31,10 @@ class Video(Base):
     video_id: Mapped[str] = mapped_column(String(30), nullable=False)
 
 
-class Word(Base):
-    __tablename__ = "word_model"
+class Translation(Base):
+    __tablename__ = "translation_model"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    word_form: Mapped[str] = mapped_column(String(50), nullable=False)
-    word_translation: Mapped[str] = mapped_column(String(150), nullable=False)
-
-
-class Sentence(Base):
-    __tablename__ = "sentence_model"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    word_id: Mapped[str] = mapped_column(
-        ForeignKey("word_model.id", ondelete="CASCADE"),
-    )
-    clicked_sentence: Mapped[str] = mapped_column(String(300), nullable=False)
+    word: Mapped[str] = mapped_column(String(50), nullable=False)
+    sentence: Mapped[str] = mapped_column(String(300), nullable=False)
+    translation: Mapped[str] = mapped_column(String(500), nullable=False)

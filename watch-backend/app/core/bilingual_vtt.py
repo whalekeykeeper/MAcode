@@ -54,6 +54,9 @@ def __convert_srt_to_vtt(srt_path: str) -> None:
 
 
 def merge(path1: Path, path2: Path, video_id: str) -> str:
+    """
+    A function to merge two monolingual subtitles into a bilingual srt file.
+    """
     with path1.open(encoding='utf-8') as fi1:
         subs1 = {s.index: s for s in srt.parse(fi1)}
 

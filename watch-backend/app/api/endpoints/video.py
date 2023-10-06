@@ -2,13 +2,13 @@
 
 
 from fastapi import APIRouter, Depends
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api import deps
-from app.models import Video, User
+from app.models import Video
 from app.schemas.requests import VideoRequest
 from app.schemas.responses import VideoResponse
+
 
 from app.core.video_and_subtitles import get_video_id, get_bilingual_vtt
 router = APIRouter()
@@ -18,7 +18,6 @@ router = APIRouter()
 async def get_new_video(
         new_video: VideoRequest,
         session: AsyncSession = Depends(deps.get_session),
-        current_user: User = Depends(deps.get_current_user),
 ):
     """Creates new video. Only for logged users."""
     url = new_video.video_url

@@ -21,3 +21,12 @@ class UserCreateRequest(BaseRequest):
 
 class VideoRequest(BaseRequest):
     video_url: str
+
+
+class TranslationRequest(BaseRequest):
+    word: str
+    sentence: str
+
+
+class StatisticsRequest(BaseRequest):
+    text: str
