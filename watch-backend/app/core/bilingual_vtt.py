@@ -10,20 +10,21 @@ from vtt_to_srt.vtt_to_srt import ConvertDirectories
 from typing import ValuesView
 
 
-def create_bilingual_vtt(video_id: str) -> None:
+def create_bilingual_vtt(video_id: str, static_folder: str) -> None:
     """
     A function to create bilingual vtt subtitles.
     """
-    path_zh = "static/" + video_id + "/" + video_id + ".zh-CN.vtt"
-    path_en = "static/" + video_id + "/" + video_id + ".en.vtt"
+
+    path_zh = static_folder + video_id + "/" + video_id + ".zh-CN.vtt"
+    path_en = static_folder + video_id + "/" + video_id + ".en.vtt"
     __convert_vtt_to_srt(path_zh)
     __convert_vtt_to_srt(path_en)
 
     path1 = Path(path_zh[:-4] + ".srt")
     path2 = Path(path_en[:-4] + ".srt")
-    merged_srt_path = merge(path1, path2, video_id)
+    merged_srt_path = merge(path1, path2, video_id, static_folder)
 
-    __convert_srt_to_vtt(merged_srt_path)
+    return __convert_srt_to_vtt(merged_srt_path)
 
 
 def __convert_vtt_to_srt(vtt_path: str) -> None:
@@ -38,7 +39,8 @@ def __convert_vtt_to_srt(vtt_path: str) -> None:
 
 def __convert_srt_to_vtt(srt_path: str) -> None:
     srt_input = open(srt_path, "r", encoding='utf8')
-    vtt_output = open(Path(srt_path[:-4] + '.vtt'), "w", encoding='utf8')
+    vtt_path = srt_path[:-4] + '.vtt'
+    vtt_output = open(Path(vtt_path), "w", encoding='utf8')
 
     lines = srt_input.read().splitlines()
 
@@ -51,9 +53,10 @@ def __convert_srt_to_vtt(srt_path: str) -> None:
             vtt_output.write(convline + '\n')
         i += 1
     vtt_output.close()
+    return vtt_path
 
 
-def merge(path1: Path, path2: Path, video_id: str) -> str:
+def merge(path1: Path, path2: Path, video_id: str, static_folder: str) -> str:
     """
     A function to merge two monolingual subtitles into a bilingual srt file.
     """
@@ -90,7 +93,7 @@ def merge(path1: Path, path2: Path, video_id: str) -> str:
         nearest_slot_in_subs1.content = f'{nearest_slot_in_subs1.content}§{sub.content}'
         subs1[nearest_slot_in_subs1.index] = nearest_slot_in_subs1
 
-    merged_path = "static/" + video_id + "/" + video_id + ".bi.srt"
+    merged_path = static_folder + video_id + "/" + video_id + ".bi.srt"
     merged_srt = Path(merged_path)
 
     with merged_srt.open(mode='w', encoding='utf-8') as fout:
