@@ -99,7 +99,7 @@ def __save_subtitle(video_id: str, lan_code: str, data: Element,
 
     output_file_path = static_folder + video_id + "/" + video_id + "." + lan_code + ".vtt"
     print("-----\nvtt output_file_path: ", output_file_path)
-    print(Path(output_file_path).exists())
+
     with open(output_file_path, "w", encoding="utf-8") as vtt_file:
         vtt_file.write(vtt)
     # print(f".vtt file saved at: {output_file_path}")

@@ -27,8 +27,8 @@ class Video(Base):
     __tablename__ = "video_model"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    video_url: Mapped[str] = mapped_column(String(250), nullable=False)
-    video_id: Mapped[str] = mapped_column(String(30), nullable=False)
+    video_url: Mapped[str] = mapped_column(String(250), nullable=False, unique=True)
+    video_id: Mapped[str] = mapped_column(String(30), nullable=False, unique=True)
     video_path: Mapped[str] = mapped_column(String(150), nullable=False)
     vtt_path: Mapped[str] = mapped_column(String(150), nullable=False)
 

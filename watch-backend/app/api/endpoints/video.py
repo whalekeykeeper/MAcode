@@ -29,12 +29,22 @@ async def get_new_video(
     """Creates new video. Only for logged users."""
     url = new_video.video_url
     video_id = get_video_id(url)  # Get YouTube video id
+    async with session.begin():
+        stmt = select(Video).where(Video.video_url == new_video.video_url)
+        existing_video = await session.execute(stmt)
+        existing_video = existing_video.scalars().first()
 
-    video_path, vtt_path = get_bilingual_vtt(url)  # Download YouTube video, get subtitles, create bilingual subtitle
+        if existing_video:
+            # If the video already exists, return it without adding a duplicate
+            return existing_video
 
-    video = Video(video_url=new_video.video_url, video_id=video_id, video_path=video_path, vtt_path=vtt_path)
-    session.add(video)
-    await session.commit()
+        # Download YouTube video, get subtitles, create bilingual subtitle
+        video_path, vtt_path = get_bilingual_vtt(url)
+
+        video = Video(video_url=new_video.video_url, video_id=video_id, video_path=video_path, vtt_path=vtt_path)
+        session.add(video)
+        await session.commit()
+
     return video
 
 
@@ -49,10 +59,7 @@ async def stream_video(video_id: str, session: AsyncSession = Depends(deps.get_s
 
     if video:
         video_file_path = video.video_path
-        print(video)
-        print(video.video_path)
-        print(Path(video_file_path).exists())
-        if os.path.exists(video_file_path):
+        if Path(video_file_path).exists():
             return StreamingResponse(open(video_file_path, "rb"), media_type="video/mp4")
         else:
             raise HTTPException(status_code=404, detail="Video file not found")
@@ -60,7 +67,27 @@ async def stream_video(video_id: str, session: AsyncSession = Depends(deps.get_s
         raise HTTPException(status_code=404, detail="Video not found")
 
 
-#
+@router.get("/vtt/{video_id}")
+async def stream_video(video_id: str, session: AsyncSession = Depends(deps.get_session)):
+    """
+    Send subtitle.
+    """
+    stmt = await session.execute(
+        select(Video)
+        .where(Video.video_id == video_id)
+    )
+    video = stmt.scalars().first()
+
+    if video:
+        vtt_file_path = video.vtt_path
+        if Path(vtt_file_path).exists():
+            return FileResponse(vtt_file_path, filename=vtt_file_path[-18:])
+        else:
+            raise HTTPException(status_code=404, detail="Vtt file not found")
+    else:
+        raise HTTPException(status_code=404, detail="Vtt not found")
+
+
 # @router.get("/get-video/{video_id}/", response_model=VideoResponse)
 # async def get_video_by_id(video_id: str):
 #     # Create an asynchronous database session
