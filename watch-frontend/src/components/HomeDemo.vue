@@ -25,30 +25,84 @@
 
 <!--      <textarea-and-button-component name="Input YouTube url" :color="'blue'" @button-click="getVideoID" />-->
 
-      <div>
-        <v-text-field v-model="video_url" :append-icon="'marker' ? 'mdi-map-marker' : 'mdi-map-marker-off'"
-                      density="compact" label="Youtube Link" type="url"
-                      name="url" @click:append="getVideo" @keyup.enter="getVideo(video_url)" clearable
-                      >
-        </v-text-field>
-      </div>
+      <v-text-field v-model="youtube_url" :append-icon="'mdi-send'"
+                    density="compact" label="Youtube Link" type="url"
+                    name="url" @click:append="getVideo" @keyup.enter="getVideo(youtube_url)" clearable
+      >
+      </v-text-field>
       <!-- name, color, disabled -->
       <!-- Event: send; returns the text that was entered -->
       <div>
         <v-progress-circular indeterminate v-if="isLoading"/>
-        <h4 v-else>{{this.video_url}}</h4>
+        <h4 v-else>{{this.youtube_url}}</h4>
       </div>
 
-    </div>
+
+      </div>
 
 
-<!--    <div>-->
-<!--      <h3>Simplification:</h3>-->
-<!--      <textarea v-model="text" placeholder="Input the text you want to simplify."></textarea>-->
-<!--      <button class="button button2" @click="simplify(text)">Simplification</button>-->
+      <v-row>
+        <v-card class="mt-1" style="min-height: 550px">
+          <video
+              ref="video-player"
+              width="800"
+              height="450"
+              controls
+              :src="stream_url"
+              type="video/mp4"
+              crossorigin="anonymous"
+              @timeupdate="updateCurrentCues" >
 
-<!--      <h4>{{this.simplified_text}}</h4>-->
-<!--    </div>-->
+            <track
+                default
+                kind="metadata"
+                label="BILINGUAL"
+                srclang="bi"
+                :src="vtt_url"
+                ref="bilingual-caption"
+            />
+
+          </video>
+
+          <div>
+            <div v-for="(cue, index) in currentCues" :key="index">
+              <div v-for="(mono_cue,index) in cue.text.split('§')" :key="index">
+                <span v-for="(word, index) in mono_cue.split(' ')" :key="index">
+                  {{ word }}&nbsp;
+                </span>
+              </div>
+            </div>
+          </div>
+
+        </v-card>
+        <v-card variant="outlined" class="mt-10">
+          <v-card-title class="text-left">Words:</v-card-title>
+          <v-card-subtitle class="text-left">Words to be learned</v-card-subtitle>
+          <v-table>
+            <thead>
+            <tr>
+              <th class="text-left">
+                Word
+              </th>
+              <th class="text-left">
+                Translation
+              </th>
+              <th class="text-left">
+                Sentence
+              </th>
+            </tr>
+            </thead>
+            <tbody>
+
+<!--            <tr v-for="(item, i) in this.clicked" :key="i">-->
+<!--              <td>{{ item[0] }}</td>-->
+<!--              <td>{{ item[1] }}</td>-->
+<!--              <td>{{ item[2] }}</td>-->
+<!--            </tr>-->
+            </tbody>
+          </v-table>
+        </v-card>
+        </v-row>
   </v-container>
 
 </template>
@@ -65,80 +119,65 @@ export default defineComponent({
   data() {
     return {
       isLoading: false,
-      video_url: 'https://www.youtube.com/watch?v=LMt8xm4t7XQ',
+      youtube_url: 'https://www.youtube.com/watch?v=LMt8xm4t7XQ',
       video_id: '',
+      stream_url: '',
+      vtt_url: '',
       word: '',
-      translated_word: '',
-      simplified_text: '',
       get_video_url: "http://127.0.0.1:8000/video/",
-      // translation_url: 'https://api.dictionaryapi.dev/api/v2/entries/en/',
-      // simplification_url: 'http://127.0.0.1:8000/simplification/',
-
+      currentCues: [],
+      tokenizedCues: [],
     };
   },
   methods: {
-    getVideo() {
+    async getVideo() {
       this.isLoading = true;
       console.log("The YouTube url is: ")
-      console.log(this.video_url)
-
-      const request = {video_url: this.video_url};
-      api.getVideo(request)
-          .then((resp) => {
-            console.log("TRUE", resp);
-            this.video_id = resp.data['video_id'];
-            console.log(this.video_id)
-            this.isLoading = false;
-          })
-          .catch((err) => {
-            console.log("ERROR:", err);
-            this.isLoading = false;
-          })
+      console.log(this.youtube_url)
+      this.stream_url = 'http://127.0.0.1:8000/video/stream/'
+      this.vtt_url = 'http://127.0.0.1:8000/video/vtt/'
+      // const request = {video_url: this.video_url};
+      // api.getVideo(request)
+      //     .then((resp) => {
+      //       console.log("TRUE", resp);
+      //       this.video_id = resp.data['video_id'];
+      //       console.log(this.video_id)
+      //       this.isLoading = false;
+      //     })
+      //     .catch((err) => {
+      //       console.log("ERROR:", err);
+      //       this.isLoading = false;
+      //     })
+      try{
+        const response = await api.getVideo({ "video_url": this.youtube_url })
+        console.log(response.status)
+        if (response.status === 201) {
+          this.video_id = response.data.video_id;
+          this.stream_url = this.stream_url + this.video_id;
+          this.vtt_url = this.vtt_url + this.video_id
+          this.isLoading = false;
+        } else {
+          console.error('Failed to get the video: ', response.statusText);
+        }
+      } catch (error) {
+        console.error('Error: ', error);
+        this.isLoading = false;
+      }
 
     },
-    // translate(word) {
-    //   this.isLoading = true;
-    //   console.log("The sent word is: ")
-    //   console.log(word)
-    //   const sentText = {text: String(word)};
-    //   const headers = {
-    //     "Content-Type": "application/json",
-    //     "accept": "application/json"
-    //   };
-    //   // api.getTranslation(sentText)
-    //   axios.post(this.translation_url, sentText, { headers })
-    //       .then((resp) => {
-    //
-    //         this.translated_word = resp.data[0]['phonetic'];
-    //         console.log(this.translated_word)
-    //         this.isLoading = false;
-    //       })
-    //       .catch((err) => {
-    //         console.log(err);
-    //         this.isLoading = false;
-    //       });
-    // },
-
-    // simplify(text) {
-    //   console.log("The sent text is: ")
-    //   console.log(text)
-    //   const sentText = {text: String(text)};
-    //   const headers = {
-    //     "Content-Type": "application/json",
-    //     "accept": "application/json"
-    //   };
-    //   // api.getTranslation(word).then((resp))
-    //   axios.post(this.simplification_url, sentText, { headers })
-    //       .then((resp) => {
-    //
-    //         console.log(resp)
-    //         this.simplified_text = resp.data;
-    //         console.log(this.simplified_text)
-    //       })
-    //       .catch((err) => {
-    //         console.log(err);
-    //       });
-    // },
+    updateCurrentCues() {
+      const trackElement = this.$refs['bilingual-caption'];
+      console.log("trackElement in updateCurrentCues(): ")
+      console.log(trackElement);
+      if (trackElement && trackElement.track && trackElement.track.activeCues) {
+        const activeCues = trackElement.track.activeCues;
+        this.currentCues = Array.from(activeCues);
+        // console.log("this.currentCues: ", this.currentCues);
+        // this.sendCuesToBackend();
+      } else {
+        this.currentCues = [];
+      }
+    },
 
   },
 })
