@@ -2,41 +2,19 @@
   <v-container>
     <h1>Learning by watching</h1>
     <div>
-<!--      <v-row>-->
-<!--        <v-col  cols="12" md="6" xs="12">-->
-<!--          <h1>Test1</h1>-->
-<!--          <div class="bg-amber-accent-1">-->
-<!--            <p class="ma-10 pa-10">Test</p>-->
-<!--          </div>-->
-<!--          <v-btn color="primary" class="">Button1</v-btn>-->
-<!--          <v-btn color="secondary">Button2</v-btn>-->
-<!--          <v-btn color="pink">Button3</v-btn>-->
-<!--        </v-col>-->
-
-<!--        <v-col cols="12" md="6" xs="12">-->
-<!--          <h1>Test2</h1>-->
-<!--        </v-col>-->
-<!--      </v-row>-->
 
       <h3>Input a YouTube video url:</h3>
-      <!--    <textarea v-model="word" placeholder="Input the word you want to translate."></textarea>-->
-      <!--    <button class="button button1" @click="translate(word)">Translate</button>-->
-      <!--    <ButtonComponent name="Translate" :color="'pink'" @button-click="translate(word)"/>-->
-
-<!--      <textarea-and-button-component name="Input YouTube url" :color="'blue'" @button-click="getVideoID" />-->
 
       <v-text-field v-model="youtube_url" :append-icon="'mdi-send'"
                     density="compact" label="Youtube Link" type="url"
                     name="url" @click:append="getVideo" @keyup.enter="getVideo(youtube_url)" clearable
       >
       </v-text-field>
-      <!-- name, color, disabled -->
-      <!-- Event: send; returns the text that was entered -->
+
       <div>
         <v-progress-circular indeterminate v-if="isLoading"/>
         <h4 v-else>{{this.youtube_url}}</h4>
       </div>
-
 
       </div>
 
@@ -67,7 +45,9 @@
           <div>
             <div v-for="(cue, index) in currentCues" :key="index">
               <div v-for="(mono_cue,index) in cue.text.split('§')" :key="index">
-                <span v-for="(word, index) in mono_cue.split(' ')" :key="index">
+                <span v-for="(word, index) in mono_cue.split(' ')" :key="index"
+                      @click="getTranslation(word, mono_cue)"
+                      class="text-h5 click">
                   {{ word }}&nbsp;
                 </span>
               </div>
@@ -94,11 +74,15 @@
             </thead>
             <tbody>
 
-<!--            <tr v-for="(item, i) in this.clicked" :key="i">-->
-<!--              <td>{{ item[0] }}</td>-->
-<!--              <td>{{ item[1] }}</td>-->
-<!--              <td>{{ item[2] }}</td>-->
-<!--            </tr>-->
+            <tr v-for="(item, i) in clicked" :key="i">
+              <td>{{ item.word }}</td>
+              <td>
+                <v-progress-circular indeterminate v-if="item.isTranslating" />
+                {{ item.translation }}
+              </td>
+              <td>{{ item.sentence }}</td>
+            </tr>
+
             </tbody>
           </v-table>
         </v-card>
@@ -119,14 +103,15 @@ export default defineComponent({
   data() {
     return {
       isLoading: false,
+      isTranslating: false,
       youtube_url: 'https://www.youtube.com/watch?v=LMt8xm4t7XQ',
       video_id: '',
       stream_url: '',
       vtt_url: '',
-      word: '',
-      get_video_url: "http://127.0.0.1:8000/video/",
       currentCues: [],
-      tokenizedCues: [],
+      word: '',
+      sentence: '',
+      clicked: [],
     };
   },
   methods: {
@@ -136,39 +121,23 @@ export default defineComponent({
       console.log(this.youtube_url)
       this.stream_url = 'http://127.0.0.1:8000/video/stream/'
       this.vtt_url = 'http://127.0.0.1:8000/video/vtt/'
-      // const request = {video_url: this.video_url};
-      // api.getVideo(request)
-      //     .then((resp) => {
-      //       console.log("TRUE", resp);
-      //       this.video_id = resp.data['video_id'];
-      //       console.log(this.video_id)
-      //       this.isLoading = false;
-      //     })
-      //     .catch((err) => {
-      //       console.log("ERROR:", err);
-      //       this.isLoading = false;
-      //     })
       try{
         const response = await api.getVideo({ "video_url": this.youtube_url })
-        console.log(response.status)
         if (response.status === 201) {
           this.video_id = response.data.video_id;
           this.stream_url = this.stream_url + this.video_id;
           this.vtt_url = this.vtt_url + this.video_id
           this.isLoading = false;
         } else {
-          console.error('Failed to get the video: ', response.statusText);
+          console.error('Failed to get the video/subtitle: ', response.statusText);
         }
       } catch (error) {
         console.error('Error: ', error);
         this.isLoading = false;
       }
-
     },
     updateCurrentCues() {
       const trackElement = this.$refs['bilingual-caption'];
-      console.log("trackElement in updateCurrentCues(): ")
-      console.log(trackElement);
       if (trackElement && trackElement.track && trackElement.track.activeCues) {
         const activeCues = trackElement.track.activeCues;
         this.currentCues = Array.from(activeCues);
@@ -179,10 +148,32 @@ export default defineComponent({
       }
     },
 
+    async getTranslation(clickedWord, clickedSentence) {
+
+      const clickedItem = this.clicked.find(item => item.word === clickedWord && item.sentence === clickedSentence);
+      if (clickedItem) return;
+      this.clicked.push({ clickedWord, clickedSentence, isTranslating: true, translation: '' });
+      try{
+        const response = await api.getTranslation({ "word": clickedWord, "sentence": clickedSentence})
+        if (response.status === 201) {
+          const translation = response.data.translation;
+          const clickedItem = this.clicked.find(item => item.word === clickedWord && item.sentence === clickedSentence);
+
+          if (clickedItem) {
+            clickedItem.translation = translation;
+            clickedItem.isTranslating = false;
+          }
+        } else {
+          console.error('Failed to get the translation: ', response.statusText);
+        }
+      } catch (error) {
+        console.error('Error: ', error);
+        this.isTranslating = false;
+      }
+    },
   },
 })
 </script>
-
 
 <style scoped>
 
@@ -190,22 +181,8 @@ div {
   margin-bottom: 20px;
 }
 
-.button {
-  //background-color: #4CAF50; /* Green */
-  //border: none;
-  //color: white;
-  //padding: 20px;
-  //text-align: center;
-  //text-decoration: none;
-  //display: inline-block;
-  //font-size: 16px;
-  //margin: 4px 2px;
-  //cursor: pointer;
+.click:hover {
+  background-color: yellow;
+  cursor: pointer;
 }
-
-.button1 {border-radius: 2px;
-  background-color: #ffc2d1;}
-.button2 {border-radius: 50%;
-  background-color: #c8b6ff}
-
 </style>

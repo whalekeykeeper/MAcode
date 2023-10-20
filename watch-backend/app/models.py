@@ -37,6 +37,6 @@ class Translation(Base):
     __tablename__ = "translation_model"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    word: Mapped[str] = mapped_column(String(50), nullable=False, unique=True)
+    word: Mapped[str] = mapped_column(String(50), nullable=False)
     sentence: Mapped[str] = mapped_column(String(300), nullable=False)
     translation: Mapped[str] = mapped_column(String(500), nullable=False)

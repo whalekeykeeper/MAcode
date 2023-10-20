@@ -10,5 +10,8 @@ export default {
     getVideo(request) {
         return axiosApi.post(`/video`, request);
     },
+    getTranslation(request) {
+        return axiosApi.post(`/translation`, request)
+    }
 
 }
