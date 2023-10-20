@@ -18,7 +18,6 @@
 
       </div>
 
-
       <v-row>
         <v-card class="mt-1" style="min-height: 550px">
           <video
@@ -55,7 +54,7 @@
           </div>
 
         </v-card>
-        <v-card variant="outlined" class="mt-10">
+        <v-card variant="outlined" class="mt-10" style="width: 100%;">
           <v-card-title class="text-left">Words:</v-card-title>
           <v-card-subtitle class="text-left">Words to be learned</v-card-subtitle>
           <v-table>
@@ -74,14 +73,14 @@
             </thead>
             <tbody>
 
-            <tr v-for="(item, i) in clicked" :key="i">
-              <td>{{ item.word }}</td>
-              <td>
-                <v-progress-circular indeterminate v-if="item.isTranslating" />
-                {{ item.translation }}
-              </td>
-              <td>{{ item.sentence }}</td>
-            </tr>
+              <tr v-for="(item, i) in clicked" :key="i">
+                <td>{{ item.word }}</td>
+                <td>
+                  <v-progress-circular indeterminate v-if="item.isTranslating" />
+                  <span v-if="!item.isTranslating">{{ item.translation }}</span>
+                </td>
+                <td>{{ item.sentence }}</td>
+              </tr>
 
             </tbody>
           </v-table>
@@ -151,8 +150,9 @@ export default defineComponent({
     async getTranslation(clickedWord, clickedSentence) {
 
       const clickedItem = this.clicked.find(item => item.word === clickedWord && item.sentence === clickedSentence);
-      if (clickedItem) return;
-      this.clicked.push({ clickedWord, clickedSentence, isTranslating: true, translation: '' });
+      if (!clickedItem) {
+        // If not, push the item with empty translation and start translating
+        this.clicked.push({ word: clickedWord, sentence: clickedSentence, isTranslating: true, translation: '' });
       try{
         const response = await api.getTranslation({ "word": clickedWord, "sentence": clickedSentence})
         if (response.status === 201) {
@@ -170,6 +170,7 @@ export default defineComponent({
         console.error('Error: ', error);
         this.isTranslating = false;
       }
+      }
     },
   },
 })
@@ -184,5 +185,11 @@ div {
 .click:hover {
   background-color: yellow;
   cursor: pointer;
+}
+
+.center-container {
+  display: flex;
+  justify-content: center;
+  width: 100%; /* Ensure the video spans the full width */
 }
 </style>
