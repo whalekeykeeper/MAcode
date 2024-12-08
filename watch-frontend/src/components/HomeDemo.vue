@@ -38,7 +38,6 @@
                 :src="vtt_url"
                 ref="bilingual-caption"
             />
-
           </video>
 
           <div>
@@ -113,6 +112,28 @@ export default defineComponent({
       clicked: [],
     };
   },
+
+  mounted() {
+    // Check if this.$refs.videoPlayer is defined
+    if (this.$refs.videoPlayer) {
+      const videoPlayer = this.$refs.videoPlayer;
+
+      // Add an event listener to the video element for the "click" event
+      videoPlayer.addEventListener('click', (e) => {
+        const progressBar = videoPlayer.getBoundingClientRect();
+        const clickedPosition = e.clientX - progressBar.left;
+        const progressBarWidth = progressBar.width;
+        const duration = videoPlayer.duration;
+
+        // Calculate the new time based on the clicked position and duration
+        const newTime = (clickedPosition / progressBarWidth) * duration;
+
+        // Set the video's currentTime to the new time
+        videoPlayer.currentTime = newTime;
+      });
+    }
+  },
+
   methods: {
     async getVideo() {
       this.isLoading = true;
@@ -191,5 +212,22 @@ div {
   display: flex;
   justify-content: center;
   width: 100%; /* Ensure the video spans the full width */
+}
+
+.custom-progress-bar {
+  width: 100%;
+  cursor: pointer;
+  height: 10px;
+  appearance: none;
+  background: #ccc;
+  border: none;
+}
+
+.custom-progress-bar::-webkit-progress-bar {
+  background: #ccc;
+}
+
+.custom-progress-bar::-webkit-progress-value {
+  background: #007bff;
 }
 </style>
