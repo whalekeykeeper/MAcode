@@ -42,14 +42,14 @@ def translate(word: str, sentence: str) -> str:
     model = genai.GenerativeModel("gemini-1.5-flash")
     response = model.generate_content(prompt)
     translated_text = response.text.strip()
-    print("Response: ", response)
+
     # For debugging
     print("----\nword: \"{}\"\nsentence: \"{}\"\ntranslation: {}\n".format(word, sentence, translated_text))
     return translated_text
 
 # Remove punctuations at the beginning or the end of the word. The word is either in English or Simplified Chinese.
 def _preprocess_word(word: str) -> str:
-    word = word.strip(".,?!\"'()[]{}:;").strip()
+    word = word.strip(".,?!\"'()[]{}:;—-!~@#$\\/%^&*_|<>").strip()
     return word
 
 def stat(text: str) -> []:
