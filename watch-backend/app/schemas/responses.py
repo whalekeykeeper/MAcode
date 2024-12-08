@@ -29,6 +29,7 @@ class TranslationResponse(BaseResponse):
     id: int
     word: str
     sentence: str
+    clean_word: str
     translation: str
 
 

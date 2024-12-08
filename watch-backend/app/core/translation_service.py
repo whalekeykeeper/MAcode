@@ -1,8 +1,11 @@
 # import openai
-import re
 import os
+import re
+from typing import Tuple
+
 import google.generativeai as genai
 from dotenv import load_dotenv
+
 load_dotenv()
 
 api_key = os.getenv("GEMINI_API_KEY")
@@ -24,33 +27,43 @@ genai.configure(api_key=api_key)
 #                 "content": "You are a helpful assistant who is good on math.",
 #             },
 #             {"role": "user",
-#              "content": "You are a experienced translator for English and Chinese. Detect the given language, "
+#              "content": "You are an experienced translator for English and Chinese. Detect the given language, "
 #                         "and translate it into the other language among English and Simplified Chinese. Then translate given word \"{}\" in sentence \"{}\". Keep the translation short.".format(word, sentence)},
 #         ],
 #     )
 #     return completion.choices[0].message.content
 
+
 ## The following code is using Google Gemini API
-def translate(word: str, sentence: str) -> str:
-    word = _preprocess_word(word)
+def translate(word: str, sentence: str) -> Tuple[str, str]:
+    clean_word = _preprocess_word(word)
     # Define the prompt for translation
-    # ToDo(Qin): Improve the prompt
-    prompt = (f"Translate the word \"{word}\" in the context of the sentence \"{sentence}\" from English to simplified "
-              f"Chinese or vice versa. Keep the translation short and ensure the translation is " \
-             f"accurate and contextually appropriate. Provide the translated word in written format only, "
-              f"not the entire sentence, and also not the pinyin.")
+    # ToDo(Qin): To improve the prompt
+    prompt = (
+        f'Translate the word "{clean_word}" in the context of the sentence "{sentence}" from English to simplified '
+        f"Chinese or vice versa. Keep the translation short and ensure the translation is "
+        f"accurate and contextually appropriate. Provide the translated word in written format only, "
+        f"not the entire sentence, and also not the pinyin."
+    )
     model = genai.GenerativeModel("gemini-1.5-flash")
     response = model.generate_content(prompt)
     translated_text = response.text.strip()
 
     # For debugging
-    print("----\nword: \"{}\"\nsentence: \"{}\"\ntranslation: {}\n".format(word, sentence, translated_text))
-    return translated_text
+    print(
+        '----\nclean_word: "{}"\nsentence: "{}"\ntranslation: {}\n'.format(
+            clean_word, sentence, translated_text
+        )
+    )
+    return clean_word, translated_text
+
 
 # Remove punctuations at the beginning or the end of the word. The word is either in English or Simplified Chinese.
 def _preprocess_word(word: str) -> str:
-    word = word.strip(".,?!\"'()[]{}:;—-!~@#$\\/%^&*_|<>").strip()
-    return word
+    # ToDo(Qin): To improve
+    clean_word = word.strip(".,?!\"'()[]{}:;—-!~@#$\\/%^&*_|<>").strip()
+    return clean_word
+
 
 def stat(text: str) -> []:
     sentences = re.split("[?.,!]", text)
