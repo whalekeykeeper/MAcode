@@ -15,15 +15,18 @@ router = APIRouter()
 
 @router.post("/", response_model=TranslationResponse, status_code=201)
 async def create_new_translation(
-        new_translation: TranslationRequest,
-        session: AsyncSession = Depends(deps.get_session),
+    new_translation: TranslationRequest,
+    session: AsyncSession = Depends(deps.get_session),
 ):
     """Creates new translation. Only for logged users."""
-    word_translation = translate(new_translation.word, new_translation.sentence)
+    clean_word, word_translation = translate(
+        new_translation.word, new_translation.sentence
+    )
 
     trans = Translation(
         word=new_translation.word,
         sentence=new_translation.sentence,
+        clean_word=clean_word,
         translation=word_translation,
     )
     session.add(trans)
@@ -33,14 +36,11 @@ async def create_new_translation(
 
 @router.get("/words", response_model=list[TranslationResponse], status_code=200)
 async def get_all_my_translations(
-        session: AsyncSession = Depends(deps.get_session),
+    session: AsyncSession = Depends(deps.get_session),
 ):
     """Get list of clicked words for current user."""
 
-    stmt = (
-        select(Translation)
-        .order_by(Translation.word)
-    )
+    stmt = select(Translation).order_by(Translation.word)
     words = await session.execute(stmt)
     return words.scalars().all()
 

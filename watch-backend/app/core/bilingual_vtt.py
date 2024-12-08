@@ -1,13 +1,13 @@
 import re
-import jieba
 from datetime import date, timedelta
 from pathlib import Path
-from nltk.tokenize import word_tokenize
+from typing import ValuesView
 
+import jieba
 import srt
 import webvtt
+from nltk.tokenize import word_tokenize
 from vtt_to_srt.vtt_to_srt import ConvertDirectories
-from typing import ValuesView
 
 
 def create_bilingual_vtt(video_id: str, static_folder: str) -> None:
@@ -33,24 +33,26 @@ def __convert_vtt_to_srt(vtt_path: str) -> None:
     vtt.save_as_srt()
     srt_path = vtt_path[:-4] + ".srt"
 
-    convert_file = ConvertDirectories(vtt_path, enable_recursive=False, encoding_format="utf-8")
+    convert_file = ConvertDirectories(
+        vtt_path, enable_recursive=False, encoding_format="utf-8"
+    )
     convert_file.convert_vtt_to_str(srt_path)
 
 
 def __convert_srt_to_vtt(srt_path: str) -> None:
-    srt_input = open(srt_path, "r", encoding='utf8')
-    vtt_path = srt_path[:-4] + '.vtt'
-    vtt_output = open(Path(vtt_path), "w", encoding='utf8')
+    srt_input = open(srt_path, "r", encoding="utf8")
+    vtt_path = srt_path[:-4] + ".vtt"
+    vtt_output = open(Path(vtt_path), "w", encoding="utf8")
 
     lines = srt_input.read().splitlines()
 
-    vtt_output.write('WEBVTT\n\n')
+    vtt_output.write("WEBVTT\n\n")
 
     i = 1
     while i < len(lines):
         if not lines[i].isdigit():
-            convline = re.sub(',(?! )', '.', lines[i])
-            vtt_output.write(convline + '\n')
+            convline = re.sub(",(?! )", ".", lines[i])
+            vtt_output.write(convline + "\n")
         i += 1
     vtt_output.close()
     return vtt_path
@@ -60,23 +62,23 @@ def merge(path1: Path, path2: Path, video_id: str, static_folder: str) -> str:
     """
     A function to merge two monolingual subtitles into a bilingual srt file.
     """
-    with path1.open(encoding='utf-8') as fi1:
+    with path1.open(encoding="utf-8") as fi1:
         subs1 = {s.index: s for s in srt.parse(fi1)}
 
         for k, v in subs1.items():
             # To merge two rows into one row
             if "\n" in v.content:
-                v.content = v.content.replace("\n", '')
+                v.content = v.content.replace("\n", "")
             # To tokenize
             v.content = __tokenize_zh(v.content)
 
-    with path2.open(encoding='utf-8') as fi2:
+    with path2.open(encoding="utf-8") as fi2:
         subs2 = {s.index: s for s in srt.parse(fi2)}
 
         # To merge two rows into one row
         for k, v in subs2.items():
             if "\n" in v.content:
-                v.content = v.content.replace("\n", ' ')
+                v.content = v.content.replace("\n", " ")
             #     # To tokenize
             # v.content = __tokenize_en(v.content)
 
@@ -90,13 +92,13 @@ def merge(path1: Path, path2: Path, video_id: str, static_folder: str) -> str:
         # For each line in subs2, find the nearest slot in subs1 which has
         # the closest start time as the start time in that line of subs2
         nearest_slot_in_subs1: srt.Subtitle = __nearest(subs1.values(), start)
-        nearest_slot_in_subs1.content = f'{nearest_slot_in_subs1.content}§{sub.content}'
+        nearest_slot_in_subs1.content = f"{nearest_slot_in_subs1.content}§{sub.content}"
         subs1[nearest_slot_in_subs1.index] = nearest_slot_in_subs1
 
     merged_path = static_folder + video_id + "/" + video_id + ".bi.srt"
     merged_srt = Path(merged_path)
 
-    with merged_srt.open(mode='w', encoding='utf-8') as fout:
+    with merged_srt.open(mode="w", encoding="utf-8") as fout:
         fout.write(srt.compose(list(subs1.values())))
     return merged_path
 
@@ -129,6 +131,6 @@ def __nearest(items: ValuesView, pivot: date) -> ValuesView:
     return min(items, key=lambda x: abs(x.start - pivot))
 
 
-if __name__ == '__main__':
-    id = 'aUBawr1hUwo'
+if __name__ == "__main__":
+    id = "aUBawr1hUwo"
     create_bilingual_vtt(id)
