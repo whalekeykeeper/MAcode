@@ -69,6 +69,9 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: str
     OPENAI_ORGANIZATION: str
 
+    # GEMINI setting
+    GEMINI_API_KEY: str
+
     # FIRST SUPERUSER
     FIRST_SUPERUSER_EMAIL: EmailStr
     FIRST_SUPERUSER_PASSWORD: str
