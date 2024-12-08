@@ -7,3 +7,4 @@ watch-backend/.DS_Store
 watch-backend/alembic/versions/
 watch-backend/app/core/static/
 watch-backend/static/
+/.idea
