@@ -60,7 +60,8 @@ async def stream_video(video_id: str, session: AsyncSession = Depends(deps.get_s
     if video:
         video_file_path = video.video_path
         if Path(video_file_path).exists():
-            return StreamingResponse(open(video_file_path, "rb"), media_type="video/mp4")
+            # return StreamingResponse(open(video_file_path, "rb"), media_type="video/mp4")
+            return FileResponse(video_file_path)
         else:
             raise HTTPException(status_code=404, detail="Video file not found")
     else:
