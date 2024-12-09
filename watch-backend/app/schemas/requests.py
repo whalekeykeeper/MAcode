@@ -30,3 +30,7 @@ class TranslationRequest(BaseRequest):
 
 class StatisticsRequest(BaseRequest):
     text: str
+
+
+class CorrectnessUpdateRequest(BaseModel):
+    is_correct: bool

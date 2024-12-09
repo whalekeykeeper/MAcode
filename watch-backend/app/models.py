@@ -2,7 +2,7 @@
 
 import uuid
 
-from sqlalchemy import ForeignKey, Integer, String
+from sqlalchemy import JSON, Column, Integer, String
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
@@ -41,3 +41,12 @@ class Translation(Base):
     sentence: Mapped[str] = mapped_column(String(300), nullable=False)
     clean_word: Mapped[str] = mapped_column(String(50), nullable=False)
     translation: Mapped[str] = mapped_column(String(500), nullable=False)
+
+
+class GapFillingTable(Base):
+    __tablename__ = "gapfilling_table"
+    id = Column(Integer, primary_key=True, index=True)
+    id_in_translation_model = Column(Integer, nullable=False)
+    gapped_sentence = Column(String, nullable=False)
+    options = Column(JSON, nullable=False)  # Store as JSON for options
+    correct_frequency = Column(Integer, default=0)

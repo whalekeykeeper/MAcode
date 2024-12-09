@@ -36,3 +36,11 @@ class TranslationResponse(BaseResponse):
 class StatisticsResponse(BaseResponse):
     number_sentences: int
     number_words: int
+
+
+class GapFillingResponse(BaseResponse):
+    id: int
+    id_in_translation_model: int
+    gapped_sentence: str
+    options: list[str]
+    correct_frequency: int
