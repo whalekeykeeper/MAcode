@@ -16,21 +16,25 @@
       </div>
 
       <div class="card-body">
-        <p class="card-title mb-3 text-center">
-          {{ isSubmitted ? 'Review:' : 'Please select the most fitting word based on the context and given translation.' }}
-        </p>
+        <h3 class="card-subtitle mb-3 text-left">
+          {{ isSubmitted ? '' : 'Please select the most fitting word based on the context and given translation.' }}
+        </h3>
+        <div class="empty-row"></div>
 
         <div v-if="!isSubmitted">
           <div class="exercise-content mb-3">
-            <p class="fw-bold text-center">
+            <p class="fw-bold text-left gapped-sentence">
               {{ currentIndex + 1 }}. {{ currentExercise.gapped_sentence }}
             </p>
 
-            <div class="options d-flex flex-wrap justify-content-center">
+            <div class="empty-row"></div>
+            <div class="empty-row"></div>
+
+            <div class="options d-flex justify-content-start">
               <button
                   v-for="(option, index) in currentExercise.options"
                   :key="option"
-                  class="btn btn-outline-primary m-2 option-btn"
+                  class="btn btn-outline-primary m-2 option-btn option-text"
                   :class="{
                   'btn-primary text-white': selectedOption === option,
                   'btn-outline-primary': selectedOption !== option,
@@ -38,9 +42,15 @@
                 }"
                   @click="selectOption(option)"
               >
-                {{ String.fromCharCode(65 + index) }}. {{ option }}
+                {{ String.fromCharCode(65 + index) }}. {{ option }}&nbsp;&nbsp;&nbsp;&nbsp;
               </button>
             </div>
+
+            <div class="empty-row"></div>
+            <div class="empty-row"></div>
+            <div class="empty-row"></div>
+            <div class="empty-row"></div>
+            <div class="empty-row"></div>
           </div>
 
           <div class="d-flex justify-content-between align-items-center mt-3">
@@ -79,14 +89,14 @@
               :key="exercise.id"
               class="mb-3"
           >
-            <p class="fw-bold">
+            <p class="fw-bold text-left gapped-sentence">
               {{ index + 1 }}. {{ exercise.gapped_sentence }}
             </p>
             <div class="options d-flex flex-wrap">
               <button
                   v-for="(option, idx) in exercise.options"
                   :key="option"
-                  class="btn m-1"
+                  class="btn m-1 option-text"
                   :class="{
                   'btn-success': option === exercise.correct_option,
                   'btn-danger': option === exercise.user_selected && option !== exercise.correct_option,
@@ -94,13 +104,17 @@
                     option !== exercise.correct_option &&
                     option !== exercise.user_selected
                 }"
+                  disabled
               >
-                {{ String.fromCharCode(65 + idx) }}. {{ option }}
+                {{ String.fromCharCode(65 + idx) }}. {{ option }}&nbsp;&nbsp;&nbsp;&nbsp;
               </button>
             </div>
           </div>
 
-          <div class="mt-4">
+          <div class="empty-row"></div>
+          <div class="empty-row"></div>
+
+          <div class="mt-4 bg-light p-3 statistic-text">
             <p class="fw-bold">
               In the above gap filling task, you chose
               {{ exercises.filter(e => e.user_selected === e.correct_option).length }}
@@ -191,7 +205,7 @@ export default {
       this.selectedOption = option;
       this.exercises[this.currentIndex].user_selected = option;
       clearTimeout(this.timer);
-      this.timer = setTimeout(this.goToNext, 3000);
+      this.timer = setTimeout(this.goToNext, 500);
     },
     goToNext() {
       if (this.currentIndex < this.MAX_EXERCISES - 1) {
@@ -244,5 +258,21 @@ export default {
 }
 .text-primary {
   color: blue !important;
+}
+.bg-light {
+  background-color: #f8f9fa !important;
+}
+.empty-row {
+  height: 1rem;
+}
+.gapped-sentence {
+  font-size: 1.5rem;
+}
+.option-text {
+  font-size: 1.5rem;
+}
+.statistic-text {
+  font-size: 1.5rem;
+  font-weight: bold;
 }
 </style>
