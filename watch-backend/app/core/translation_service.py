@@ -13,8 +13,6 @@ if not api_key:
     print("Error: GEMINI_API_KEY is not set")
 else:
     print("API Key loaded successfully!")
-
-# Get the Gemini API key from environment variables
 genai.configure(api_key=api_key)
 
 # ## The following code is using OpenAI API
