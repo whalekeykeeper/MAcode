@@ -1,12 +1,10 @@
-import pandas as pd
 from typing import List
+
+import pandas as pd
 
 
 def extract_cefr_wordlist(
-        file_path: str,
-        tabs: List[str],
-        columns: List[str],
-        output_csv_path: str
+    file_path: str, tabs: List[str], columns: List[str], output_csv_path: str
 ) -> None:
     """
     Extract specified columns from given tabs in an Excel file and save to a CSV file.
@@ -36,8 +34,8 @@ def extract_cefr_wordlist(
 
 # Example usage
 if __name__ == "__main__":
-    file_path = "../../dataset/CEFR_J_Wordlist_1.6.xlsx"
+    file_path = "../../resources/CEFR_J_Wordlist_1.6.xlsx"
     tabs = ["A1", "A2", "B1", "B2"]
     columns = ["headword", "pos", "CEFR"]
-    output_csv_path = "../../dataset/CEFR_combined_data.csv"
+    output_csv_path = "../../resources/CEFR_combined_data.csv"
     extract_cefr_wordlist(file_path, tabs, columns, output_csv_path)

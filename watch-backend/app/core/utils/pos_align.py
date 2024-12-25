@@ -5,12 +5,15 @@ import pandas as pd
 
 POS_TAG_SPACY = "$, '', ,, -LRB-, -RRB-, ., :, ADD, AFX, CC, CD, DT, EX, FW, HYPH, IN, JJ, JJR, JJS, LS, MD, NFP, NN, NNP, NNPS, NNS, PDT, POS, PRP, PRP$, RB, RBR, RBS, RP, SYM, TO, UH, VB, VBD, VBG, VBN, VBP, VBZ, WDT, WP, WP$, WRB, XX, _SP, ``"
 
+
 def read_pos_spacy() -> list:
     return POS_TAG_SPACY.split(", ")
 
+
 def read_pos_cefrj() -> list:
     data = pd.read_csv("../../resources/CEFR_combined_data.csv")
-    return list(set(data['pos']))
+    return list(set(data["pos"]))
+
 
 def align_pos() -> dict:
     mapping = {}
@@ -32,9 +35,29 @@ def align_pos() -> dict:
     mapping["be-verb"] = ["VB", "VBD", "VBG", "VBN", "VBP", "VBZ"]
     mapping["adverb"] = ["RB", "RBR", "RBS", "RP", "WRB"]
     mapping["noun"] = ["NN", "NNS", "NNP", "NNPS"]
-    mapping["other"] = ['$', "''", ',', '-LRB-', '-RRB-', '.', ':', 'ADD', 'AFX', 'EX', 'FW', 'HYPH', 'LS', 'NFP',
-                        'POS', 'SYM', 'XX', '_SP', '``']
+    mapping["other"] = [
+        "$",
+        "''",
+        ",",
+        "-LRB-",
+        "-RRB-",
+        ".",
+        ":",
+        "ADD",
+        "AFX",
+        "EX",
+        "FW",
+        "HYPH",
+        "LS",
+        "NFP",
+        "POS",
+        "SYM",
+        "XX",
+        "_SP",
+        "``",
+    ]
     return mapping
+
 
 if __name__ == "__main__":
     pos_spacy = read_pos_spacy()
