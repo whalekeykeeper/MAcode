@@ -15,10 +15,10 @@
 # alembic upgrade head
 
 from uuid import uuid4
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.future import select
-from sqlalchemy import JSON, JSONB, Boolean, Float, ForeignKey, Integer, String
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+
+from sqlalchemy import JSON, Boolean, Float, ForeignKey, Integer, String
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
 class Base(DeclarativeBase):
@@ -30,7 +30,7 @@ class User(Base):
     For each unique user, we create a new User object.
     """
 
-    __tablename__ = "users"
+    __tablename__ = "user_model"
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     uuid: Mapped[str] = mapped_column(
         String(36), nullable=False, unique=True, default=lambda: str(uuid4())
@@ -47,9 +47,7 @@ class User(Base):
     family: Mapped["Family"] = relationship(
         "Family", back_populates="user", uselist=False
     )
-    graph: Mapped["Graph"] = relationship(
-        "Graphs", back_populates="user", uselist=False
-    )
+    graph: Mapped["Graph"] = relationship("Graph", back_populates="user", uselist=False)
 
 
 class Video(Base):
@@ -59,7 +57,7 @@ class Video(Base):
 
     __tablename__ = "video_model"
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    YouTube_id: Mapped[str] = mapped_column(
+    ytb_id: Mapped[str] = mapped_column(
         String(10), nullable=False, unique=True
     )  # YouTube video id
     url: Mapped[str] = mapped_column(
@@ -74,11 +72,12 @@ class Video(Base):
 
 
 # We might not need the following table since it is only used for displaying.
-class Lines(Base):
+class Line(Base):
     """
     Collect each line from subtitles. Just for display reason.
     """
 
+    __tablename__ = "line_model"
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     language: Mapped[str] = mapped_column(String(50), nullable=False)
 
@@ -95,6 +94,7 @@ class Sentence(Base):
     """
 
     __tablename__ = "sentence_model"
+
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     video_id: Mapped[int] = mapped_column(Integer)
     language: Mapped[str] = mapped_column(String(50), nullable=False)
@@ -112,10 +112,12 @@ class Words(Base):
     """
 
     __tablename__ = "word_model"
+
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     language: Mapped[str] = mapped_column(String(50), nullable=False)
 
     raw_word: Mapped[str] = mapped_column(String(50), nullable=False)
+    cleaned_word: Mapped[str] = mapped_column(String(50), nullable=False)
     lemma: Mapped[str] = mapped_column(String(50), nullable=False)
     pos: Mapped[str] = mapped_column(
         String(15), nullable=False
@@ -135,6 +137,7 @@ class ChosenWord(Base):
     """
 
     __tablename__ = "chosen_word_model"
+
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     word_id: Mapped[int] = mapped_column(ForeignKey("word_model.id"), nullable=False)
     sentence_id: Mapped[int] = mapped_column(
@@ -149,6 +152,7 @@ class ChosenSentence(Base):
     """
 
     __tablename__ = "chosen_sentence_model"
+
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     sentence_id: Mapped[int] = mapped_column(
         ForeignKey("sentence_model.id"), nullable=False
@@ -161,6 +165,7 @@ class Vocabulary(Base):
     """
 
     __tablename__ = "vocabulary_model"
+
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     user_id = mapped_column(Integer, nullable=False)
     # List of word IDs associated with this user's vocabulary
@@ -181,9 +186,10 @@ class Family(Base):
     """
 
     __tablename__ = "family_model"
+
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     user_id: Mapped[int] = mapped_column(
-        ForeignKey("users.id"), nullable=False, unique=True
+        ForeignKey("user.id"), nullable=False, unique=True
     )
     family_data: Mapped[dict] = mapped_column(
         JSON, nullable=False, default=dict
@@ -192,7 +198,7 @@ class Family(Base):
     # Relationship
     vocabulary = relationship("Vocabulary", back_populates="family", uselist=False)
     user = relationship("User", back_populates="family")
-    graph = relationship("Graphs", back_populates="family", uselist=False)
+    graph = relationship("Graph", back_populates="family", uselist=False)
 
 
 class Graphs(Base):
@@ -201,8 +207,9 @@ class Graphs(Base):
     """
 
     __tablename__ = "graph_model"
+
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    user_id: Mapped[int] = mapped_column(ForeignKey("user.id"), nullable=False)
     graph: Mapped[dict] = mapped_column(JSONB, nullable=True)
 
     # Relationship
@@ -216,6 +223,7 @@ class GapFillingTable(Base):
     """
 
     __tablename__ = "gap_filling_model"
+
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
 
     word_pos_pair: Mapped[dict] = mapped_column(
@@ -227,5 +235,5 @@ class GapFillingTable(Base):
         JSON, nullable=False, default=list
     )  # Store as JSON for distractors
 
-    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    user_id: Mapped[int] = mapped_column(ForeignKey("user.id"), nullable=False)
     correct: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
