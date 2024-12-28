@@ -6,6 +6,7 @@ from fastapi.middleware.trustedhost import TrustedHostMiddleware
 
 from app.api.api import api_router
 from app.core import config
+from app.core.logger import logger
 
 app = FastAPI(
     title=config.settings.PROJECT_NAME,
@@ -26,3 +27,5 @@ app.add_middleware(
 
 # Guards against HTTP Host Header attacks
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=config.settings.ALLOWED_HOSTS)
+
+logger.info("Application started successfully.")
