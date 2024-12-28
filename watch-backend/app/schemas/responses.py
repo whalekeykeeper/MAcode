@@ -1,4 +1,4 @@
-from pydantic import BaseModel, ConfigDict, EmailStr
+from pydantic import BaseModel, ConfigDict
 
 
 class BaseResponse(BaseModel):
@@ -16,31 +16,33 @@ class AccessTokenResponse(BaseResponse):
 
 
 class UserResponse(BaseResponse):
-    id: str
-    email: EmailStr
+    uuid: str
+    exists: bool
 
 
 class VideoResponse(BaseResponse):
     id: int
-    video_id: str
+    ytb_id: str
+    url: str
+    video_path: str
+    vtt_path: str
 
 
-class TranslationResponse(BaseResponse):
-    id: int
-    word: str
-    sentence: str
-    clean_word: str
-    translation: str
+# class TranslationResponse(BaseResponse):
+#     id: int
+#     lemma: str
+#     pos: str
+#     translation: str
+#     sentence: str
 
-
-class StatisticsResponse(BaseResponse):
-    number_sentences: int
-    number_words: int
-
-
-class GapFillingResponse(BaseResponse):
-    id: int
-    id_in_translation_model: int
-    gapped_sentence: str
-    options: list[str]
-    correct_frequency: int
+# class StatisticsResponse(BaseResponse):
+#     number_sentences: int
+#     number_words: int
+#
+#
+# class GapFillingResponse(BaseResponse):
+#     id: int
+#     id_in_translation_model: int
+#     gapped_sentence: str
+#     options: list[str]
+#     correct_frequency: int

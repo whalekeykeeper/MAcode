@@ -12,6 +12,15 @@ export default {
     },
     getTranslation(request) {
         return axiosApi.post(`/translation`, request)
+    },
+    async getOrCreateUser() {
+        const userUUID = localStorage.getItem("user_uuid");
+        const headers = userUUID ? { "X-User-UUID": userUUID } : {};
+        const response = await axiosApi.post("/get-or-create-user/", {}, { headers });
+        if (!userUUID) {
+            localStorage.setItem("user_uuid", response.data.uuid);
+        }
+        return response.data;
     }
 
 }

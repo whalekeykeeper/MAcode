@@ -15,11 +15,11 @@ services:
     environment:
       - POSTGRES_DB=${DEFAULT_DATABASE_DB}
       - POSTGRES_USER=${DEFAULT_DATABASE_USER}
-      - POSTGRES_PASSWORD=${DEFAULT_DATABASE_PASSWORD}
+      - POSTGRES_PASSWORD=postgres
     env_file:
       - .env
     ports:
-      - "${DEFAULT_DATABASE_PORT}:5432"
+      - "5433:5432"
 
   test_database:
     restart: unless-stopped
@@ -29,11 +29,11 @@ services:
     environment:
       - POSTGRES_DB=${TEST_DATABASE_DB}
       - POSTGRES_USER=${TEST_DATABASE_USER}
-      - POSTGRES_PASSWORD=${TEST_DATABASE_PASSWORD}
+      - POSTGRES_PASSWORD=postgres
     env_file:
       - .env
     ports:
-      - "${TEST_DATABASE_PORT}:5432"
+      - "5434:5432"
 
 volumes:
   test_database_data:

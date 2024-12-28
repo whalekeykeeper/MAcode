@@ -30,7 +30,19 @@ target_metadata = Base.metadata
 
 
 def get_database_uri():
-    return app_config.settings.DEFAULT_SQLALCHEMY_DATABASE_URI
+    """Get database URI from environment variables."""
+    from dotenv import load_dotenv
+    import os
+    
+    load_dotenv()
+    
+    return (
+        f"postgresql+asyncpg://"
+        f"{os.getenv('DEFAULT_DATABASE_USER')}:"
+        f"{os.getenv('DEFAULT_DATABASE_PASSWORD')}@"
+        f"localhost:5433/"
+        f"{os.getenv('DEFAULT_DATABASE_DB')}"
+    )
 
 
 def run_migrations_offline():

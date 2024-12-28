@@ -133,7 +133,9 @@ class Word(Base):
     # complexity is calculated based on the frequency of the word in the subtlexus.csv
     complexity: Mapped[float] = mapped_column(Float, nullable=True)
 
-    __table_args__ = (Index("idx_word_language_raw", "language", "raw_word"),)
+    __table_args__ = (
+        Index('idx_word_language_word', 'language', 'word'),
+    )
 
 
 class WordContext(Base):
@@ -188,15 +190,15 @@ class Vocabulary(Base):
     __tablename__ = "vocabulary_model"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    user_id = mapped_column(Integer, nullable=False)
-    # List of word IDs associated with this user's vocabulary
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("user_model.id"), nullable=False, unique=True
+    )
     word_ids: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
-
     family_id: Mapped[int] = mapped_column(
         ForeignKey("family_model.id"), nullable=True, unique=True
     )
 
-    # Relationship
+    # Relationships
     user = relationship("User", back_populates="vocabulary")
     family = relationship("Family", back_populates="vocabulary", uselist=False)
 
@@ -210,13 +212,11 @@ class Family(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     user_id: Mapped[int] = mapped_column(
-        ForeignKey("user.id"), nullable=False, unique=True
+        ForeignKey("user_model.id"), nullable=False, unique=True
     )
-    family_data: Mapped[dict] = mapped_column(
-        JSON, nullable=False, default=dict
-    )  # Store word family data as JSON
+    family_data: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
 
-    # Relationship
+    # Relationships
     vocabulary = relationship("Vocabulary", back_populates="family", uselist=False)
     user = relationship("User", back_populates="family")
     graph = relationship("Graph", back_populates="family", uselist=False)
@@ -230,10 +230,15 @@ class Graph(Base):
     __tablename__ = "graph_model"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    user_id: Mapped[int] = mapped_column(ForeignKey("user.id"), nullable=False)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("user_model.id"), nullable=False, unique=True
+    )
+    family_id: Mapped[int] = mapped_column(
+        ForeignKey("family_model.id"), nullable=True, unique=True
+    )
     graph: Mapped[dict] = mapped_column(JSONB, nullable=True)
 
-    # Relationship
+    # Relationships
     family = relationship("Family", back_populates="graph", uselist=False)
     user = relationship("User", back_populates="graph")
 
@@ -256,5 +261,5 @@ class GapFillingTable(Base):
         JSON, nullable=False, default=list
     )  # Store as JSON for distractors
 
-    user_id: Mapped[int] = mapped_column(ForeignKey("user.id"), nullable=False)
+    user_id: Mapped[int] = mapped_column(ForeignKey("user_model.id"), nullable=False)
     correct: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)

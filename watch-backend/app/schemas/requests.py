@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel
 
 
 class BaseRequest(BaseModel):
@@ -6,31 +6,32 @@ class BaseRequest(BaseModel):
     pass
 
 
-class RefreshTokenRequest(BaseRequest):
-    refresh_token: str
+# class RefreshTokenRequest(BaseRequest):
+#     refresh_token: str
+#
+#
 
 
-class UserUpdatePasswordRequest(BaseRequest):
-    password: str
-
-
-class UserCreateRequest(BaseRequest):
-    email: EmailStr
-    password: str
+class UserRequest(BaseRequest):
+    uuid: str  # the user's uuid from localStorage if exists, else null
 
 
 class VideoRequest(BaseRequest):
+    uuid: str
     video_url: str
 
 
 class TranslationRequest(BaseRequest):
+    uuid: str
     word: str
     sentence: str
 
 
-class StatisticsRequest(BaseRequest):
-    text: str
-
-
-class CorrectnessUpdateRequest(BaseModel):
-    is_correct: bool
+# class StatisticsRequest(BaseRequest):
+#     uuid: str
+#     text: str
+#
+#
+# class CorrectnessUpdateRequest(BaseModel):
+#     uuid: str
+#     is_correct: bool
