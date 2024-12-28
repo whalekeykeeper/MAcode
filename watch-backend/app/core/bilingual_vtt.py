@@ -51,7 +51,7 @@ def merge_subtitles(path1: str, path2: str, video_id: str, static_folder: str) -
     # Merge based on closest timestamp
     for idx, sub_en in subs_en.items():
         nearest_zh = min(subs_zh.values(), key=lambda x: abs(x.start - sub_en.start))
-        nearest_zh.content = f"{nearest_zh.content}§\n{sub_en.content}"
+        nearest_zh.content = f"{nearest_zh.content}§§§{sub_en.content}"
 
     # Write merged subtitles
     output_path = f"{static_folder}/{video_id}/{video_id}_bilingual.srt"
