@@ -14,13 +14,14 @@
 # # apply all migrations
 # alembic upgrade head
 
+from datetime import datetime
 from uuid import uuid4
 
 from sqlalchemy import JSON, Boolean, Float, ForeignKey, Index, Integer, String, DateTime
+from sqlalchemy import func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
-from datetime import datetime
-from sqlalchemy import func
+
 
 class Base(DeclarativeBase):
     pass
@@ -64,16 +65,17 @@ class Video(Base):
     vtt_path: Mapped[str] = mapped_column(String(250), nullable=False)
 
 
-# We might not need the following table since it is only used for displaying.
 class Line(Base):
     """
     Collect each line from subtitles.
     """
-
     __tablename__ = "line_model"
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     video_id: Mapped[int] = mapped_column(ForeignKey("video_model.id"), nullable=False)
+
+    # language should be simplified Chinese if before "§§§", English if after "§§§".
     language: Mapped[str] = mapped_column(String(50), nullable=False)
+
     line_text: Mapped[str] = mapped_column(String(500), nullable=False)
     # words contains the word_ids for each word in the line
     word_ids: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
@@ -90,6 +92,7 @@ class Sentence(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     video_id: Mapped[int] = mapped_column(ForeignKey("video_model.id"), nullable=False)
+    # languge should be simplified Chinese if before "§§§", English if after "§§§".
     language: Mapped[str] = mapped_column(String(50), nullable=False)
     sentence_text: Mapped[str] = mapped_column(String(500), nullable=False)
 
@@ -104,6 +107,9 @@ class Word(Base):
     __tablename__ = "word_model"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+
+    # languge should be either simplified Chinese or English. 
+    # We use "zh" for simplified Chinese and "en" for English.
     language: Mapped[str] = mapped_column(String(50), nullable=False)
 
     word: Mapped[str] = mapped_column(String(50), nullable=False)
@@ -114,7 +120,8 @@ class Word(Base):
     # pos for (word, context) in Spacy
     pos: Mapped[str] = mapped_column(String(15), nullable=False)
 
-    # translation can be null when the line for the word is only in one language.
+    # translation is expected to be extracted from subtitle part of the other language in the bilingual subtitle.
+    # We will use NLP method to align words, but when this is not possible, we will send the word and the context to query with Gemini API.
     translation: Mapped[str] = mapped_column(String(50), nullable=True)
 
     # cefr level if we find the same (lemma, pos) in the CEFR-J database, otherwise null
@@ -149,14 +156,14 @@ class ChosenWord(Base):
     __tablename__ = "chosen_word_model"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    user_id: Mapped[int] = mapped_column(ForeignKey("user.id"), nullable=False)
+    user_id: Mapped[int] = mapped_column(ForeignKey("user_model.id"), nullable=False)
 
     # Even if a word is chosen multiple times, we only store one record for each word.
     word_id: Mapped[int] = mapped_column(ForeignKey("word_model.id"), nullable=False, unique=True)
-    
+
     # To allow user to mark the word as learned in the frontend.
     marked_as_learned: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    
+
     # record_time is the time when the word is chosen so that we can sort the words by time.
     record_time: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=func.now)
 
