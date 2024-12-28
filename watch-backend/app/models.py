@@ -16,10 +16,11 @@
 
 from uuid import uuid4
 
-from sqlalchemy import JSON, Boolean, Float, ForeignKey, Integer, String
+from sqlalchemy import JSON, Boolean, Float, ForeignKey, Index, Integer, String, DateTime
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
-
+from datetime import datetime
+from sqlalchemy import func
 
 class Base(DeclarativeBase):
     pass
@@ -36,13 +37,6 @@ class User(Base):
         String(36), nullable=False, unique=True, default=lambda: str(uuid4())
     )
 
-    word_ids: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
-    video_ids: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
-    chosen_word_ids: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
-    chosen_sentence_ids: Mapped[list] = mapped_column(
-        JSON, nullable=False, default=list
-    )
-
     vocabulary: Mapped["Vocabulary"] = relationship("Vocabulary", back_populates="user")
     family: Mapped["Family"] = relationship(
         "Family", back_populates="user", uselist=False
@@ -57,35 +51,34 @@ class Video(Base):
 
     __tablename__ = "video_model"
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    ytb_id: Mapped[str] = mapped_column(
-        String(10), nullable=False, unique=True
-    )  # YouTube video id
-    url: Mapped[str] = mapped_column(
-        String(250), nullable=False, unique=True
-    )  # YouTube link
-    video_path: Mapped[str] = mapped_column(
-        String(250), nullable=False
-    )  # local storage address
-    vtt_path: Mapped[str] = mapped_column(
-        String(250), nullable=False
-    )  # local storage address
+
+    # YouTube video id
+    ytb_id: Mapped[str] = mapped_column(String(15), nullable=False, unique=True)
+
+    # YouTube link
+    url: Mapped[str] = mapped_column(String(250), nullable=False, unique=True)
+
+    # local storage address
+    video_path: Mapped[str] = mapped_column(String(250), nullable=False)
+    # local storage address
+    vtt_path: Mapped[str] = mapped_column(String(250), nullable=False)
 
 
 # We might not need the following table since it is only used for displaying.
 class Line(Base):
     """
-    Collect each line from subtitles. Just for display reason.
+    Collect each line from subtitles.
     """
 
     __tablename__ = "line_model"
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    video_id: Mapped[int] = mapped_column(ForeignKey("video_model.id"), nullable=False)
     language: Mapped[str] = mapped_column(String(50), nullable=False)
-
     line_text: Mapped[str] = mapped_column(String(500), nullable=False)
+    # words contains the word_ids for each word in the line
+    word_ids: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
 
-    sentence_ids: Mapped[list] = mapped_column(
-        JSON, nullable=False, default=list
-    )  # a line might belong to two or three sentences
+    __table_args__ = (Index("idx_line_language", "language"),)
 
 
 class Sentence(Base):
@@ -96,17 +89,14 @@ class Sentence(Base):
     __tablename__ = "sentence_model"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    video_id: Mapped[int] = mapped_column(Integer)
+    video_id: Mapped[int] = mapped_column(ForeignKey("video_model.id"), nullable=False)
     language: Mapped[str] = mapped_column(String(50), nullable=False)
+    sentence_text: Mapped[str] = mapped_column(String(500), nullable=False)
 
-    sentence_text_in_lower: Mapped[str] = mapped_column(
-        String(500), nullable=False
-    )  # after lower()
-
-    word_ids: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    __table_args__ = (Index("idx_sentence_video_language", "video_id", "language"),)
 
 
-class Words(Base):
+class Word(Base):
     """
     To collect words from subtitles.
     """
@@ -116,47 +106,71 @@ class Words(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     language: Mapped[str] = mapped_column(String(50), nullable=False)
 
-    raw_word: Mapped[str] = mapped_column(String(50), nullable=False)
-    cleaned_word: Mapped[str] = mapped_column(String(50), nullable=False)
+    word: Mapped[str] = mapped_column(String(50), nullable=False)
+
+    # lemma is the base form of the word, getting from Spacy
     lemma: Mapped[str] = mapped_column(String(50), nullable=False)
-    pos: Mapped[str] = mapped_column(
-        String(15), nullable=False
-    )  # pos for (word, context) in Spacy
-    translation: Mapped[str] = mapped_column(String(50), nullable=False)
 
-    cefr: Mapped[str] = mapped_column(String(10), nullable=True)  # could be null
-    doc_frequency: Mapped[int] = mapped_column(Integer, nullable=False)
-    complexity: Mapped[float] = mapped_column(Float, nullable=False)
+    # pos for (word, context) in Spacy
+    pos: Mapped[str] = mapped_column(String(15), nullable=False)
 
-    sentence_ids: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    # translation can be null when the line for the word is only in one language.
+    translation: Mapped[str] = mapped_column(String(50), nullable=True)
+
+    # cefr level if we find the same (lemma, pos) in the CEFR-J database, otherwise null
+    cefr: Mapped[str] = mapped_column(String(10), nullable=True)
+
+    # the frequency read from resources/subtlexus.csv under the column "Lg10WF"
+    doc_frequency: Mapped[int] = mapped_column(Integer, nullable=True)
+
+    # complexity is calculated based on the frequency of the word in the subtlexus.csv
+    complexity: Mapped[float] = mapped_column(Float, nullable=True)
+
+    __table_args__ = (Index("idx_word_language_raw", "language", "raw_word"),)
+
+
+class WordContext(Base):
+    """
+    Context-specific data for a word.
+    """
+    __tablename__ = "word_context_model"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    word_id: Mapped[int] = mapped_column(ForeignKey("word_model.id"), nullable=False)
+    line_id: Mapped[int] = mapped_column(ForeignKey("line_model.id"), nullable=False)
+    sentence_id: Mapped[int] = mapped_column(ForeignKey("sentence_model.id"), nullable=False)
 
 
 class ChosenWord(Base):
     """
-    To collect chosen words by mouse clicking.
+    To collect chosen line by pressing space bar.
+    We store the words in the line so that we can build a collection of words for future use.
     """
 
     __tablename__ = "chosen_word_model"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    word_id: Mapped[int] = mapped_column(ForeignKey("word_model.id"), nullable=False)
-    sentence_id: Mapped[int] = mapped_column(
-        ForeignKey("sentence_model.id"), nullable=False
-    )
-    marked_learned: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    user_id: Mapped[int] = mapped_column(ForeignKey("user.id"), nullable=False)
+
+    # Even if a word is chosen multiple times, we only store one record for each word.
+    word_id: Mapped[int] = mapped_column(ForeignKey("word_model.id"), nullable=False, unique=True)
+    
+    # To allow user to mark the word as learned in the frontend.
+    marked_as_learned: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    
+    # record_time is the time when the word is chosen so that we can sort the words by time.
+    record_time: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=func.now)
 
 
-class ChosenSentence(Base):
-    """
-    To collect chosen sentences by pressing space bar.
-    """
+class UserWordAssociation(Base):
+    __tablename__ = "user_word_association"
+    user_id: Mapped[int] = mapped_column(ForeignKey("user_model.id"), primary_key=True)
+    word_id: Mapped[int] = mapped_column(ForeignKey("word_model.id"), primary_key=True)
 
-    __tablename__ = "chosen_sentence_model"
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    sentence_id: Mapped[int] = mapped_column(
-        ForeignKey("sentence_model.id"), nullable=False
-    )
+class UserVideoAssociation(Base):
+    __tablename__ = "user_video_association"
+    user_id: Mapped[int] = mapped_column(ForeignKey("user_model.id"), primary_key=True)
+    video_id: Mapped[int] = mapped_column(ForeignKey("video_model.id"), primary_key=True)
 
 
 class Vocabulary(Base):
@@ -201,7 +215,7 @@ class Family(Base):
     graph = relationship("Graph", back_populates="family", uselist=False)
 
 
-class Graphs(Base):
+class Graph(Base):
     """
     Each user has a graph object.
     """
