@@ -1,60 +1,48 @@
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.future import select
 
 from app.api import deps
-from app.core.security import get_password_hash
 from app.models import User
-from app.schemas.requests import UserCreateRequest, UserUpdatePasswordRequest
+from app.schemas.requests import UserRequest
 from app.schemas.responses import UserResponse
 
 router = APIRouter()
 
 
-@router.get("/me", response_model=UserResponse)
-async def read_current_user(
-    current_user: User = Depends(deps.get_current_user),
-):
-    """Get current user"""
-    return current_user
-
-
-@router.delete("/me", status_code=204)
-async def delete_current_user(
-    current_user: User = Depends(deps.get_current_user),
+@router.post("/user", response_model=UserResponse, status_code=200)
+async def get_or_create_user(
+    user_request: UserRequest,
     session: AsyncSession = Depends(deps.get_session),
 ):
-    """Delete current user"""
-    await session.execute(delete(User).where(User.id == current_user.id))
-    await session.commit()
+    """
+    Handle user requests with three possible scenarios:
+    1. UUID is None: Create a new user.
+    2. UUID exists and matches an entry in the database: Return the user.
+    3. UUID exists but does not match any entry: Raise an error.
+    """
+    user_uuid = user_request.uuid
 
+    async with session.begin():
+        if user_uuid is None:
+            # Case 1: UUID is None, create a new user
+            new_user = User()  # UUID will be generated automatically
+            session.add(new_user)
+            await session.commit()
+            await session.refresh(new_user)
+            return UserResponse(uuid=new_user.uuid, exists=False)
 
-@router.post("/reset-password", response_model=UserResponse)
-async def reset_current_user_password(
-    user_update_password: UserUpdatePasswordRequest,
-    session: AsyncSession = Depends(deps.get_session),
-    current_user: User = Depends(deps.get_current_user),
-):
-    """Update current user password"""
-    current_user.hashed_password = get_password_hash(user_update_password.password)
-    session.add(current_user)
-    await session.commit()
-    return current_user
+        # Case 2 & 3: UUID is provided
+        stmt = select(User).where(User.uuid == user_uuid)
+        user = (await session.execute(stmt)).scalars().first()
 
+        if user:
+            # Case 2: UUID exists in the database
+            return UserResponse(uuid=user.uuid, exists=True)
 
-@router.post("/register", response_model=UserResponse)
-async def register_new_user(
-    new_user: UserCreateRequest,
-    session: AsyncSession = Depends(deps.get_session),
-):
-    """Create new user"""
-    result = await session.execute(select(User).where(User.email == new_user.email))
-    if result.scalars().first() is not None:
-        raise HTTPException(status_code=400, detail="Cannot use this email address")
-    user = User(
-        email=new_user.email,
-        hashed_password=get_password_hash(new_user.password),
-    )
-    session.add(user)
-    await session.commit()
-    return user
+        # Case 3: UUID does not exist in the database
+        raise HTTPException(
+            status_code=400,
+            detail="Provided UUID does not exist. Please check your setup.",
+        )
+
