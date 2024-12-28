@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
@@ -11,7 +11,7 @@ from app.api import deps
 from app.core.subtitle_processor import SubtitleProcessor
 from app.core.video_and_subtitles import (
     bilingual_subtitles_exist,
-    get_video_id,
+    get_ytb_id
 )
 from app.models import User, Video, UserVideoAssociation
 from app.schemas.requests import VideoRequest
@@ -22,13 +22,13 @@ router = APIRouter()
 
 @router.post("/", response_model=VideoResponse, status_code=201)
 async def get_new_video(
-    new_video: VideoRequest,
-    session: AsyncSession = Depends(deps.get_session),
-    current_user: User = Depends(deps.get_current_user),
+        new_video: VideoRequest,
+        session: AsyncSession = Depends(deps.get_session),
+        current_user: User = Depends(deps.get_current_user),
 ):
     """Creates new video and associates it with the user."""
     url = new_video.video_url
-    ytb_id = get_video_id(url)
+    ytb_id = get_ytb_id(url)
 
     if not bilingual_subtitles_exist(ytb_id):
         raise HTTPException(
@@ -48,7 +48,7 @@ async def get_new_video(
                 UserVideoAssociation.video_id == existing_video.id
             )
             existing_assoc = (await session.execute(stmt_assoc)).scalar_one_or_none()
-            
+
             if not existing_assoc:
                 # Create association if it doesn't exist
                 new_assoc = UserVideoAssociation(
@@ -57,7 +57,7 @@ async def get_new_video(
                 )
                 session.add(new_assoc)
                 await session.commit()
-            
+
             return existing_video
 
         # Initialize subtitle processor and process new video
@@ -92,9 +92,9 @@ async def get_new_video(
 
 @router.get("/stream/{video_id}")
 async def stream_video(
-    video_id: str,
-    session: AsyncSession = Depends(deps.get_session),
-    current_user: User = Depends(deps.get_current_user),
+        video_id: str,
+        session: AsyncSession = Depends(deps.get_session),
+        current_user: User = Depends(deps.get_current_user),
 ):
     """Streams the video if user has access."""
     # Check access rights
@@ -125,9 +125,9 @@ async def stream_video(
 
 @router.get("/vtt/{video_id}")
 async def get_subtitles(
-    video_id: str,
-    session: AsyncSession = Depends(deps.get_session),
-    current_user: User = Depends(deps.get_current_user),
+        video_id: str,
+        session: AsyncSession = Depends(deps.get_session),
+        current_user: User = Depends(deps.get_current_user),
 ):
     """Streams the subtitle file if user has access."""
     # Check access rights
