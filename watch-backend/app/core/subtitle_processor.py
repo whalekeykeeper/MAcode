@@ -10,6 +10,7 @@ from app.models import (
     Line, Sentence, User, Word, Video, WordContext,
     UserWordAssociation, UserVideoAssociation
 )
+from app.core.logger import logger
 
 
 @dataclass
@@ -67,7 +68,7 @@ class SubtitleProcessor:
         subtitle_lines, full_zh_text, full_en_text = self._extract_subtitle_content(video.vtt_path)
 
         if existed_video_for_unwatched_user or existing_lines:
-            print(f"\nVideo {ytb_id} exists. Creating user associations only...")
+            logger.info(f"\nVideo {ytb_id} exists. Creating user associations only...")
             # Process user associations using existing words
             await self._process_user_associations(
                 user.id,
@@ -79,7 +80,7 @@ class SubtitleProcessor:
             return video.vtt_path
 
         # If video content hasn't been processed, do full processing
-        print(f"\nProcessing new video {ytb_id}...")
+        logger.info(f"\nProcessing new video {ytb_id}...")
 
         # Create Line entries first (preserve original subtitles)
         line_map = {}  # Map to store line entries by number
@@ -91,10 +92,10 @@ class SubtitleProcessor:
                 en_line = await self._create_line(sub_line.en_text, "en", video.id, session)
                 line_map[f"en_{sub_line.line_number}"] = en_line
 
-        print(f"\nProcessing full texts into sentences...")
+        logger.info(f"\nProcessing full texts into sentences...")
 
-        print(f"full_zh_text: {full_zh_text}")
-        print(f"full_en_text: {full_en_text}")
+        logger.info(f"full_zh_text: {full_zh_text}")
+        logger.info(f"full_en_text: {full_en_text}")
 
         # Process full texts into sentences
         zh_sentences = []
@@ -374,8 +375,8 @@ class SubtitleProcessor:
 
     def _extract_subtitle_content(self, subtitle_path: str) -> Tuple[List[SubtitleLine], str, str]:
         """Extract content from bilingual VTT file."""
-        print(f"\nAttempting to read subtitle file: {subtitle_path}")
-        print(f"File exists: {Path(subtitle_path).exists()}")
+        logger.info(f"\nAttempting to read subtitle file: {subtitle_path}")
+        logger.info(f"File exists: {Path(subtitle_path).exists()}")
 
         subtitle_lines = []
         zh_texts = []
@@ -384,7 +385,7 @@ class SubtitleProcessor:
         try:
             # Read VTT file
             vtt = webvtt.read(subtitle_path)
-            print(f"Successfully read subtitle file")
+            logger.info(f"Successfully read subtitle file")
 
             for i, caption in enumerate(vtt):
                 if '§§§' in caption.text:
@@ -431,7 +432,7 @@ class SubtitleProcessor:
             return subtitle_lines, full_zh_text, full_en_text
 
         except Exception as e:
-            print(f"Error reading subtitle file: {str(e)}")
+            logger.error(f"Error reading subtitle file: {str(e)}")
             raise
 
     async def _process_user_associations(
@@ -474,7 +475,7 @@ class SubtitleProcessor:
         # Create user-video association
         await self._create_user_video_association(user_id, video_id, session)
 
-        print(f"Created associations for {len(zh_words)} Chinese words and {len(en_words)} English words")
+        logger.info(f"Created associations for {len(zh_words)} Chinese words and {len(en_words)} English words")
 
 
 if __name__ == "__main__":
