@@ -92,7 +92,8 @@ class Sentence(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     video_id: Mapped[int] = mapped_column(ForeignKey("video_model.id"), nullable=False)
-    # languge should be simplified Chinese if before "§§§", English if after "§§§".
+
+    # language should be simplified Chinese if before "§§§", English if after "§§§".
     language: Mapped[str] = mapped_column(String(50), nullable=False)
     sentence_text: Mapped[str] = mapped_column(String(500), nullable=False)
 
