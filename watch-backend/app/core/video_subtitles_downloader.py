@@ -2,7 +2,6 @@ from __future__ import unicode_literals
 
 import os
 import re
-from pathlib import Path
 
 from pytube import extract
 from youtube_transcript_api import YouTubeTranscriptApi
@@ -32,37 +31,19 @@ SIMPLIFIED_CHINESE_PATTERNS = [
 ]
 
 
-def get_bilingual_vtt(video_url: str, uuid: str):  # -> list[str]
+def download_video_and_subtitles(
+        ytb_id: str, video_url: str, static_folder: str
+) -> None:
     """
-    A function to download video, monolingual subtitles and then create bilingual subtitle.
+    A function to download YouTube video and subtitles.
     """
-    ytb_id = get_ytb_id(video_url)
-
-    static_folder = str(Path(__file__).parent.parent.parent) + "/static/"
-    video_path = static_folder + ytb_id + "/" + ytb_id + ".mp4"
-
-    video_existing = Path(video_path).exists()
-    if not video_existing:
-        # In theory, a video will always be downloaded together with its monolingual subtitles
-        download_video_and_subtitles(ytb_id, video_url, static_folder)
-    else:
-        logger.info(f"The video file for YouTube video {ytb_id} exists.")
-
-    en_vtt_existing = Path(static_folder + ytb_id + "/" + ytb_id + ".en.vtt").exists()
-
-    # If the English subtitle doesn't exist, re-download subtitles.
-    if not en_vtt_existing:
-        _download_subtitles(ytb_id, static_folder)
-
-    # bi_vtt_path = static_folder + ytb_id + "/" + ytb_id + ".bi.vtt"
-    # bi_vtt_existing = Path(bi_vtt_path).exists()
-
-    # if not bi_vtt_existing:
-    #     bi_vtt_path = create_bilingual_vtt(ytb_id, static_folder, uuid)
-    # else:
-    #     logger.Info("The bilingual vtt file exists.")
-    #
-    # return [video_path, bi_vtt_path]
+    if not video_offered_with_zh_en_subtitles(ytb_id):
+        raise HTTPException(
+            status_code=400,
+            detail="The video was not offered with subtitles with lang_code zh-CN and en."
+        )
+    _download_youtube_video(ytb_id, video_url, static_folder)
+    _download_subtitles(ytb_id, static_folder)
 
 
 def get_ytb_id(video_url: str) -> str:
@@ -70,16 +51,6 @@ def get_ytb_id(video_url: str) -> str:
     A function to extract ytb_id from video_url.
     """
     return extract.video_id(video_url)
-
-
-def download_video_and_subtitles(
-        ytb_id: str, video_url: str, static_folder: str
-) -> None:
-    """
-    A function to download YouTube video and subtitles.
-    """
-    _download_youtube_video(ytb_id, video_url, static_folder)
-    _download_subtitles(ytb_id, static_folder)
 
 
 def _download_youtube_video(ytb_id: str, video_url: str, static_folder: str) -> None:
@@ -91,6 +62,7 @@ def _download_youtube_video(ytb_id: str, video_url: str, static_folder: str) -> 
     }
     with YoutubeDL(ydl_opts) as ydl:
         ydl.download([video_url])
+        logger.info(f"Video downloaded at: {static_folder + ytb_id + '/' + ytb_id + '.mp4'}")
 
 
 def _download_subtitles(ytb_id: str, static_folder: str):
@@ -98,7 +70,7 @@ def _download_subtitles(ytb_id: str, static_folder: str):
     A function to download simplified Chinese and English subtitles of a YouTube video
     """
     transcript_list = YouTubeTranscriptApi.list_transcripts(ytb_id)
-    transcripts: Dict[str, List[Dict[str, str | float]]] = {}
+    # transcripts: Dict[str, List[Dict[str, str | float]]] = {}
     for element in transcript_list:
         # ToDo: check YouTube API if it is necessary to check if the transcript is generated
         if (
@@ -112,7 +84,6 @@ def _download_subtitles(ytb_id: str, static_folder: str):
             )
 
             _save_subtitle(ytb_id, element.language_code, data, static_folder)
-
         else:
             continue
 
@@ -129,11 +100,10 @@ def _save_subtitle(
     vtt = _convert_to_vtt(data)
 
     output_file_path = static_folder + ytb_id + "/" + ytb_id + "." + lan_code + ".vtt"
-    logger.debug(f"-----\nvtt output_file_path: {output_file_path}")
 
     with open(output_file_path, "w", encoding="utf-8") as vtt_file:
         vtt_file.write(vtt)
-    logger.debug(f".vtt file saved at: {output_file_path} for lan: {lan_code}")
+    logger.info(f"Subtitle file in {lan_code} for video {ytb_id} saved at: {output_file_path}.")
 
 
 def _convert_to_vtt(data: Element) -> str:
@@ -158,7 +128,7 @@ def _format_time(time: float) -> str:
     return f"{minutes:02d}:{seconds:02d}.{milliseconds:03d}"
 
 
-def bilingual_subtitles_exist(ytb_id) -> bool:
+def video_offered_with_zh_en_subtitles(ytb_id) -> bool:
     """
     A function to check if the given YouTube video has bilingual subtitles
     """
@@ -209,8 +179,8 @@ def _matches_patterns(lang_code, patterns):
 
 
 if __name__ == "__main__":
-    url = "https://www.youtube.com/watch?v=ONs9FCY74p0"
-    # url = "https://www.youtube.com/watch?v=wr6fQ4KpbRM"
-    id = get_ytb_id(url)
-    print(bilingual_subtitles_exist(id))
-    get_bilingual_vtt(url, "uuid")
+    video_url = "https://www.youtube.com/watch?v=ONs9FCY74p0"
+    # video_url = "https://www.youtube.com/watch?v=wr6fQ4KpbRM"
+    ytb_id = get_ytb_id(video_url)
+    logger.info("The video has both zh and en subtitles: ", video_offered_with_zh_en_subtitles(ytb_id))
+    download_video_and_subtitles(ytb_id, video_url, "static/")
