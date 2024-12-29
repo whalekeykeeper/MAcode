@@ -18,6 +18,7 @@ from app.core.video_subtitles_downloader import (
 from app.models import User, Video, UserVideoAssociation
 from app.schemas.requests import VideoRequest
 from app.schemas.responses import VideoResponse
+from app.core.logger import logger
 
 router = APIRouter()
 
@@ -48,12 +49,12 @@ async def download_and_process_video_and_subtitles(
 
             if existing_video:
                 # Ensure bilingual subtitles exist
-                await _ensure_bilingual_subtitles(existing_video, ytb_id, static_folder, session)
+                await _ensure_bilingual_subtitles(existing_video, static_folder, session)
 
                 # Check if current user has watched this video
                 if not await _has_user_watched_video(current_user.id, existing_video.id, session):
                     await _process_existed_video_for_new_user(
-                        current_user, existing_video, ytb_id, static_folder, session
+                        current_user, existing_video.id, session
                     )
 
                 return existing_video
@@ -81,15 +82,15 @@ async def _get_existing_video(ytb_id: str, session: AsyncSession) -> Optional[Vi
 
 async def _ensure_bilingual_subtitles(
         video: Video,
-        ytb_id: str,
         static_folder: str,
         session: AsyncSession
 ):
     """Ensure bilingual subtitles exist for the video."""
-    bilingual_vtt_path = f"{static_folder}/{ytb_id}/{ytb_id}_bilingual.vtt"
+    bilingual_vtt_path = f"{static_folder}/{video.ytb_id}/{video.ytb_id}_bilingual.vtt"
     if not Path(bilingual_vtt_path).exists():
-        video.vtt_path = create_bilingual_vtt(ytb_id, static_folder)
+        video.vtt_path = create_bilingual_vtt(video.ytb_id, static_folder)
         session.add(video)
+        logger.info(f"Bilingual subtitles created for video {video.ytb_id}. Check why the bilingual subtitle isnot created.")
 
 
 async def _has_user_watched_video(
@@ -107,24 +108,21 @@ async def _has_user_watched_video(
 
 async def _process_existed_video_for_new_user(
         user: User,
-        video: Video,
-        ytb_id: str,
-        static_folder: str,
+        video_id: str,
         session: AsyncSession
 ):
     """Process existed video for user who hasn't watched it before."""
     # Create association
     new_assoc = UserVideoAssociation(
         user_id=user.id,
-        video_id=video.id
+        video_id=video_id
     )
     session.add(new_assoc)
 
     # Process subtitles only for user associations
     subtitle_processor = SubtitleProcessor()
     await subtitle_processor.process_subtitles(
-        video_id=ytb_id,
-        static_folder=static_folder,
+        video_id=video_id,
         user_uuid=user.uuid,
         session=session,
         existed_video_for_unwatched_user=True
@@ -164,8 +162,7 @@ async def _process_new_video(
         # Process subtitles for all tables
         subtitle_processor = SubtitleProcessor()
         await subtitle_processor.process_subtitles(
-            video_id=ytb_id,
-            static_folder=static_folder,
+            video_id=new_video.id,
             user_uuid=user.uuid,
             session=session
         )
@@ -195,7 +192,7 @@ async def stream_video(
     )
     in_user_video_association = (await session.execute(stmt)).scalar_one_or_none()
     if not in_user_video_association:
-        logger.error(f"User {current_user.id} is not in the UserVideoAssociation with video {video_id}")
+        logger.error(f"User {current_user.id} is not in the UserVideoAssociation with video id: {video_id}")
 
     # Get video path
     stmt = select(Video).where(Video.id == video_id)
@@ -225,7 +222,7 @@ async def get_subtitles(
     )
     in_user_video_association = (await session.execute(stmt)).scalar_one_or_none()
     if not in_user_video_association:
-        logger.error(f"User {current_user.id} is not in the UserVideoAssociation with video {video_id}")
+        logger.error(f"User {current_user.id} is not in the UserVideoAssociation with video id: {video_id}")
 
     # Get VTT path
     stmt = select(Video).where(Video.id == video_id)
