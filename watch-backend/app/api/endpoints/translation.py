@@ -15,8 +15,8 @@ router = APIRouter()
 
 @router.post("/", response_model=TranslationResponse, status_code=201)
 async def create_new_translation(
-    new_translation: TranslationRequest,
-    session: AsyncSession = Depends(deps.get_session),
+        new_translation: TranslationRequest,
+        session: AsyncSession = Depends(deps.get_session),
 ):
     """Creates new translation. Only for logged users."""
     clean_word, word_translation = translate(
@@ -36,7 +36,7 @@ async def create_new_translation(
 
 @router.get("/words", response_model=list[TranslationResponse], status_code=200)
 async def get_all_my_translations(
-    session: AsyncSession = Depends(deps.get_session),
+        session: AsyncSession = Depends(deps.get_session),
 ):
     """Get list of clicked words for current user."""
 

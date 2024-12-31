@@ -31,9 +31,9 @@ async def generate_exercises(session: AsyncSession = Depends(deps.get_session)):
 
 @router.post("/{exercise_id}/correct", status_code=200)
 async def mark_exercise_as_correct(
-    exercise_id: int,
-    request: CorrectnessUpdateRequest,
-    session: AsyncSession = Depends(deps.get_session),
+        exercise_id: int,
+        request: CorrectnessUpdateRequest,
+        session: AsyncSession = Depends(deps.get_session),
 ):
     """
     Update correctness frequency for a specific exercise.

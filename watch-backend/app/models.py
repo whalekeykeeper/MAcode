@@ -128,7 +128,7 @@ class Word(Base):
     # cefr level if we find the same (lemma, pos) in the CEFR-J database, otherwise null
     cefr: Mapped[str] = mapped_column(String(10), nullable=True)
 
-    # the frequency read from resources/subtlexus.csv under the column "Lg10WF"
+    # the frequency for this word in the subtitle of the video for which it was collected from.
     doc_frequency: Mapped[int] = mapped_column(Integer, nullable=True)
 
     # complexity is calculated based on the frequency of the word in the subtlexus.csv
@@ -137,6 +137,7 @@ class Word(Base):
     __table_args__ = (
         Index('idx_word_language_word', 'language', 'word'),
     )
+
 
 
 class WordContext(Base):
@@ -163,6 +164,9 @@ class ChosenWord(Base):
 
     # Even if a word is chosen multiple times, we only store one record for each word.
     word_id: Mapped[int] = mapped_column(ForeignKey("word_model.id"), nullable=False, unique=True)
+
+    # The sentence which contains the word when the word is chosen.
+    sentence_id: Mapped[int] = mapped_column(ForeignKey("sentence_model.id"), nullable=False)
 
     # To allow user to mark the word as learned in the frontend.
     marked_as_learned: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
@@ -195,6 +199,11 @@ class Vocabulary(Base):
         ForeignKey("user_model.id"), nullable=False, unique=True
     )
     word_ids: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+
+    # key is unique word-pos pair
+    # value is ()
+    vocabulary_data: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+
     family_id: Mapped[int] = mapped_column(
         ForeignKey("family_model.id"), nullable=True, unique=True
     )
@@ -215,6 +224,8 @@ class Family(Base):
     user_id: Mapped[int] = mapped_column(
         ForeignKey("user_model.id"), nullable=False, unique=True
     )
+    # key is unique word-pos pair
+    # value is the word_id/word object of the word in the family
     family_data: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
 
     # Relationships

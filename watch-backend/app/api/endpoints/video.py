@@ -10,6 +10,7 @@ from sqlalchemy.future import select
 
 from app.api import deps
 from app.core.bilingual_subtitle_creator import create_bilingual_vtt
+from app.core.logger import logger
 from app.core.subtitle_processor import SubtitleProcessor
 from app.core.video_subtitles_downloader import download_video_and_subtitles
 from app.core.video_subtitles_downloader import (
@@ -18,7 +19,6 @@ from app.core.video_subtitles_downloader import (
 from app.models import User, Video, UserVideoAssociation
 from app.schemas.requests import VideoRequest
 from app.schemas.responses import VideoResponse
-from app.core.logger import logger
 
 router = APIRouter()
 
@@ -90,7 +90,8 @@ async def _ensure_bilingual_subtitles(
     if not Path(bilingual_vtt_path).exists():
         video.vtt_path = create_bilingual_vtt(video.ytb_id, static_folder)
         session.add(video)
-        logger.info(f"Bilingual subtitles created for video {video.ytb_id}. Check why the bilingual subtitle isnot created.")
+        logger.info(
+            f"Bilingual subtitles created for video {video.ytb_id}. Check why the bilingual subtitle isnot created.")
 
 
 async def _has_user_watched_video(
