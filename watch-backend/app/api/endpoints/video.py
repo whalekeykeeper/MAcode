@@ -16,7 +16,7 @@ from app.core.video_subtitles_downloader import download_video_and_subtitles
 from app.core.video_subtitles_downloader import (
     get_ytb_id
 )
-from app.models import User, Video, UserVideoAssociation
+from app.models import User, Video
 from app.schemas.requests import VideoRequest
 from app.schemas.responses import VideoResponse
 
@@ -41,10 +41,6 @@ async def download_and_process_video_and_subtitles(
     try:
         async with session.begin():
             # Check if ytb_id already in the database.
-            stmt_video = select(Video).where(Video.ytb_id == ytb_id)
-            existing_video = (await session.execute(stmt_video)).scalar_one_or_none()
-
-            # Try to get existing video
             existing_video = await _get_existing_video(ytb_id, session)
 
             if existing_video:
@@ -52,14 +48,12 @@ async def download_and_process_video_and_subtitles(
                 await _ensure_bilingual_subtitles(existing_video, static_folder, session)
 
                 # Check if current user has watched this video
-                if not await _has_user_watched_video(current_user.id, existing_video.id, session):
+                if not await _has_current_user_watched_video(current_user.id, existing_video.id, session):
                     await _process_existed_video_for_new_user(
                         current_user, existing_video.id, session
                     )
-
                 return existing_video
 
-            # Handle new video
             return await _process_new_video(
                 url, ytb_id, static_folder, current_user, session
             )
@@ -94,40 +88,40 @@ async def _ensure_bilingual_subtitles(
             f"Bilingual subtitles created for video {video.ytb_id}. Check why the bilingual subtitle isnot created.")
 
 
-async def _has_user_watched_video(
+async def _has_current_user_watched_video(
         user_id: int,
         video_id: int,
         session: AsyncSession
 ) -> bool:
-    """Check if user has already watched the video."""
-    stmt = select(UserVideoAssociation).where(
-        UserVideoAssociation.user_id == user_id,
-        UserVideoAssociation.video_id == video_id
-    )
-    return bool((await session.execute(stmt)).scalar_one_or_none())
+    """Check if the given user has already watched the video using User table."""
+    stmt = select(User.video_ids).where(User.id == user_id)
+    user_video_ids = (await session.execute(stmt)).scalar_one_or_none()
+
+    return video_id in user_video_ids if user_video_ids else False
 
 
 async def _process_existed_video_for_new_user(
         user: User,
-        video_id: str,
+        video_id: int,
         session: AsyncSession
 ):
     """Process existed video for user who hasn't watched it before."""
-    # Create association
-    new_assoc = UserVideoAssociation(
-        user_id=user.id,
-        video_id=video_id
-    )
-    session.add(new_assoc)
+    # Fetch word IDs from Video
+    stmt = select(Video.word_ids).where(Video.id == video_id)
+    word_ids = (await session.execute(stmt)).scalar_one_or_none()
 
-    # Process subtitles only for user associations
-    subtitle_processor = SubtitleProcessor()
-    await subtitle_processor.process_subtitles(
-        video_id=video_id,
-        user_uuid=user.uuid,
-        session=session,
-        existed_video_for_unwatched_user=True
-    )
+    if word_ids:
+        user.word_ids.extend(word_ids)
+        user.video_ids.append(video_id)
+
+        # Ensure no duplicates
+        user.word_ids = list(set(user.word_ids))
+        user.video_ids = list(set(user.video_ids))
+
+        session.add(user)
+        await session.flush()
+
+    logger.info(f"Updated user {user.id} with video {video_id} and associated words.")
 
 
 async def _process_new_video(
@@ -143,7 +137,7 @@ async def _process_new_video(
         download_video_and_subtitles(ytb_id, url, static_folder)
         bilingual_vtt_path = create_bilingual_vtt(ytb_id, static_folder)
 
-        # Create video entry
+        # Create video entry, mainly for generating id.
         new_video = Video(
             url=url,
             ytb_id=ytb_id,
@@ -152,15 +146,9 @@ async def _process_new_video(
         )
         session.add(new_video)
         await session.flush()
+        # The zh_text, en_text columns in Video table, and the other tables are created in the SubtitleProcessor.
 
-        # Create user-video association
-        new_assoc = UserVideoAssociation(
-            user_id=user.id,
-            video_id=new_video.id
-        )
-        session.add(new_assoc)
-
-        # Process subtitles for all tables
+        # Process subtitles for all tables for new videos
         subtitle_processor = SubtitleProcessor()
         await subtitle_processor.process_subtitles(
             video_id=new_video.id,
@@ -185,16 +173,6 @@ async def stream_video(
 ):
     """Streams the video.
     video_id is the id in Video table, not the ytb_id."""
-
-    # ToDo: delete the following code section for checking if the current user has association with this given video.
-    stmt = select(UserVideoAssociation).where(
-        UserVideoAssociation.user_id == current_user.id,
-        UserVideoAssociation.video_id == video_id
-    )
-    in_user_video_association = (await session.execute(stmt)).scalar_one_or_none()
-    if not in_user_video_association:
-        logger.error(f"User {current_user.id} is not in the UserVideoAssociation with video id: {video_id}")
-
     # Get video path
     stmt = select(Video).where(Video.id == video_id)
     video = (await session.execute(stmt)).scalar_one_or_none()
@@ -215,16 +193,6 @@ async def get_subtitles(
         current_user: User = Depends(deps.get_current_user),
 ):
     """Streams the subtitle file if user has access. video_id is the id in Video table."""
-
-    # ToDo: delete the following code section for checking if the current user has association with this given video.
-    stmt = select(UserVideoAssociation).where(
-        UserVideoAssociation.user_id == current_user.id,
-        UserVideoAssociation.video_id == video_id
-    )
-    in_user_video_association = (await session.execute(stmt)).scalar_one_or_none()
-    if not in_user_video_association:
-        logger.error(f"User {current_user.id} is not in the UserVideoAssociation with video id: {video_id}")
-
     # Get VTT path
     stmt = select(Video).where(Video.id == video_id)
     video = (await session.execute(stmt)).scalar_one_or_none()
