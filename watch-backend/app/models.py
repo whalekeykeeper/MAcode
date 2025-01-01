@@ -37,7 +37,8 @@ class User(Base):
     uuid: Mapped[str] = mapped_column(
         String(36), nullable=False, unique=True, default=lambda: str(uuid4())
     )
-
+    video_ids: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    word_ids: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
     vocabulary: Mapped["Vocabulary"] = relationship("Vocabulary", back_populates="user")
     family: Mapped["Family"] = relationship(
         "Family", back_populates="user", uselist=False
@@ -64,6 +65,13 @@ class Video(Base):
     # local storage address
     vtt_path: Mapped[str] = mapped_column(String(250), nullable=False)
 
+    # full chinese subtitle
+    zh_text: Mapped[str] = mapped_column(String(1000000), nullable=False)
+    # full english subtitle
+    en_text: Mapped[str] = mapped_column(String(1000000), nullable=False)
+
+    word_ids: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+
 
 class Line(Base):
     """
@@ -77,6 +85,7 @@ class Line(Base):
     language: Mapped[str] = mapped_column(String(50), nullable=False)
 
     line_text: Mapped[str] = mapped_column(String(500), nullable=False)
+
     # words contains the word_ids for each word in the line
     word_ids: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
 
@@ -121,15 +130,12 @@ class Word(Base):
     # pos for (word, context) in Spacy
     pos: Mapped[str] = mapped_column(String(15), nullable=False)
 
-    # translation is expected to be extracted from subtitle part of the other language in the bilingual subtitle.
-    # We will use NLP method to align words, but when this is not possible, we will send the word and the context to query with Gemini API.
-    translation: Mapped[str] = mapped_column(String(50), nullable=True)
-
     # cefr level if we find the same (lemma, pos) in the CEFR-J database, otherwise null
     cefr: Mapped[str] = mapped_column(String(10), nullable=True)
 
-    # the frequency for this word in the subtitle of the video for which it was collected from.
-    doc_frequency: Mapped[int] = mapped_column(Integer, nullable=True)
+    # translation is expected to be extracted from subtitle in the other language in the bilingual subtitle.
+    # We will use NLP method to align words, but when this is not possible, we will send the word and the context to query with Gemini API.
+    translation: Mapped[str] = mapped_column(String(50), nullable=True)
 
     # complexity is calculated based on the frequency of the word in the subtlexus.csv
     complexity: Mapped[float] = mapped_column(Float, nullable=True)
@@ -137,7 +143,6 @@ class Word(Base):
     __table_args__ = (
         Index('idx_word_language_word', 'language', 'word'),
     )
-
 
 
 class WordContext(Base):
@@ -175,16 +180,31 @@ class ChosenWord(Base):
     record_time: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=func.now)
 
 
-class UserWordAssociation(Base):
-    __tablename__ = "user_word_association"
-    user_id: Mapped[int] = mapped_column(ForeignKey("user_model.id"), primary_key=True)
-    word_id: Mapped[int] = mapped_column(ForeignKey("word_model.id"), primary_key=True)
+# class UserWordAssociation(Base):
+#     """
+#     To store the relationship between user and word.
+#     """
+#     __tablename__ = "user_word_association"
+#     user_id: Mapped[int] = mapped_column(ForeignKey("user_model.id"), primary_key=True)
+#     word_id: Mapped[int] = mapped_column(ForeignKey("word_model.id"), primary_key=True)
 
 
-class UserVideoAssociation(Base):
-    __tablename__ = "user_video_association"
-    user_id: Mapped[int] = mapped_column(ForeignKey("user_model.id"), primary_key=True)
-    video_id: Mapped[int] = mapped_column(ForeignKey("video_model.id"), primary_key=True)
+# class VideoWordAssociation(Base):
+#     """
+#     To store the relationship between video and word.
+#     """
+#     __tablename__ = "video_word_association"
+#     video_id: Mapped[int] = mapped_column(ForeignKey("video_model.id"), primary_key=True)
+#     word_id: Mapped[int] = mapped_column(ForeignKey("word_model.id"), primary_key=True)
+
+
+# class UserVideoAssociation(Base):
+#     """
+#     To store the relationship between user and video.
+#     """
+#     __tablename__ = "user_video_association"
+#     user_id: Mapped[int] = mapped_column(ForeignKey("user_model.id"), primary_key=True)
+#     video_id: Mapped[int] = mapped_column(ForeignKey("video_model.id"), primary_key=True)
 
 
 class Vocabulary(Base):
