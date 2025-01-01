@@ -39,6 +39,7 @@ class User(Base):
     )
     video_ids: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
     word_ids: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+
     vocabulary: Mapped["Vocabulary"] = relationship("Vocabulary", back_populates="user")
     family: Mapped["Family"] = relationship(
         "Family", back_populates="user", uselist=False
@@ -178,33 +179,6 @@ class ChosenWord(Base):
 
     # record_time is the time when the word is chosen so that we can sort the words by time.
     record_time: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=func.now)
-
-
-# class UserWordAssociation(Base):
-#     """
-#     To store the relationship between user and word.
-#     """
-#     __tablename__ = "user_word_association"
-#     user_id: Mapped[int] = mapped_column(ForeignKey("user_model.id"), primary_key=True)
-#     word_id: Mapped[int] = mapped_column(ForeignKey("word_model.id"), primary_key=True)
-
-
-# class VideoWordAssociation(Base):
-#     """
-#     To store the relationship between video and word.
-#     """
-#     __tablename__ = "video_word_association"
-#     video_id: Mapped[int] = mapped_column(ForeignKey("video_model.id"), primary_key=True)
-#     word_id: Mapped[int] = mapped_column(ForeignKey("word_model.id"), primary_key=True)
-
-
-# class UserVideoAssociation(Base):
-#     """
-#     To store the relationship between user and video.
-#     """
-#     __tablename__ = "user_video_association"
-#     user_id: Mapped[int] = mapped_column(ForeignKey("user_model.id"), primary_key=True)
-#     video_id: Mapped[int] = mapped_column(ForeignKey("video_model.id"), primary_key=True)
 
 
 class Vocabulary(Base):
