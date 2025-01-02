@@ -144,7 +144,8 @@ class SubtitleProcessor:
 
                 if zh_text:
                     # TODO: for Chinese subtitles that the line which contains "翻译人员" and/or "校对人员" in TED Talks' videos
-                    # are normally not punctuated. If the last character is not a punctuation in Chinese, add a period for now and this should be improved in the future.
+                    # are normally not punctuated. If the last character is not a punctuation in Chinese,
+                    # add a period for now and this should be improved in the future.
                     if ("翻译人员" in zh_text or "校对人员" in zh_text) and not self.nlp_zh(zh_text)[-1].is_punct:
                         zh_text += '。'
                     zh_texts.append(zh_text)
@@ -172,8 +173,8 @@ class SubtitleProcessor:
             logger.error(f"Error reading subtitle file: {str(e)}")
             raise
 
+    @staticmethod
     async def _create_line_entries_without_wordids(
-            self,
             sub_lines: List[SubtitleLine],
             video_id: int,
             session: AsyncSession
@@ -226,7 +227,6 @@ class SubtitleProcessor:
             zh_sentences: List[SentenceData],
             en_sentences: List[SentenceData],
             lines_dict: dict[str, dict[int, str]],
-            video_id: int,
             session: AsyncSession
     ) -> List[Word]:
         """Process words and their contexts, return all processed words."""
@@ -248,7 +248,6 @@ class SubtitleProcessor:
 
                 # Initialize position trackers
                 current_line_idx = 0
-                current_line_id, current_line_text = sentence_lines[0]
                 current_pos_in_line = 0
 
                 # Collect word objects and their contexts for batch processing
