@@ -218,125 +218,11 @@ class SubtitleProcessor:
 
         lines['zh'] = lines_zh
         lines['en'] = lines_en
-
         return lines
-
-    async def _create_and_update_words_contexts_linewordids(
-            self,
-            zh_sentences: List[SentenceData],
-            en_sentences: List[SentenceData],
-            lines_dict: dict[str, dict[int, str]],
-            session: AsyncSession
-    ) -> List[Word]:
-        """Process words and their contexts, return all processed words."""
-        processed_words = []
-
-        # Process both languages
-        for sentences, language in [(zh_sentences, "zh"), (en_sentences, "en")]:
-            lines = lines_dict[language]
-
-            for sentence_data in sentences:
-                # Get the text of all relevant lines for this sentence in order
-                sentence_lines = []
-                for line_id in sentence_data.line_numbers:
-                    if line_id in lines:
-                        sentence_lines.append((line_id, lines[line_id]))
-
-                if not sentence_lines:
-                    continue
-
-                # Initialize position trackers
-                current_line_idx = 0
-                current_pos_in_line = 0
-
-                # Collect word objects and their contexts for batch processing
-                word_objects = []
-                context_objects = []
-                line_updates = {}  # {line_id: [word_ids_to_add]}
-
-                # Process each token in the sentence
-                for token in sentence_data.sent:
-                    if not self._is_valid_word_token(token):
-                        continue
-
-                    token_text = token.text
-                    found = False
-
-                    # Search for token in current and subsequent lines
-                    while current_line_idx < len(sentence_lines):
-                        current_line_id, current_line_text = sentence_lines[current_line_idx]
-
-                        # Try to find token in current line starting from current position
-                        token_pos = current_line_text.find(token_text, current_pos_in_line)
-
-                        if token_pos != -1:
-                            # Token found in current line
-                            found = True
-                            current_pos_in_line = token_pos + len(token_text)
-
-                            # Create word entry
-                            word = Word(
-                                language=language,
-                                word=token_text,
-                                lemma=token.lemma_,
-                                pos=token.pos_,
-                                translation=None,
-                                complexity=None,
-                                cefr=None,
-                            )
-                            session.add(word)
-                            word_objects.append(word)
-
-                            # Store context creation info for later
-                            context_objects.append((word, current_line_id, sentence_data.sentence_id))
-
-                            # Store line update info for later
-                            if current_line_id not in line_updates:
-                                line_updates[current_line_id] = []
-                            line_updates[current_line_id].append(word)
-
-                            break
-                        else:
-                            # Token not found in current line, move to next line
-                            current_line_idx += 1
-                            if current_line_idx < len(sentence_lines):
-                                current_pos_in_line = 0
-
-                    if not found:
-                        logger.warning(
-                            f"Token '{token_text}' not found in any line of sentence: {sentence_data.sent.text}"
-                        )
-
-                # Flush to ensure all words have IDs
-                await session.flush()
-                processed_words.extend(word_objects)
-
-                # Create all WordContext objects now that we have word IDs
-                for word, line_id, sentence_id in context_objects:
-                    context = WordContext(
-                        word_id=word.id,
-                        line_id=line_id,
-                        sentence_id=sentence_id
-                    )
-                    session.add(context)
-
-                # Update Line.word_ids now that we have word IDs
-                for line_id, words in line_updates.items():
-                    stmt = select(Line).where(Line.id == line_id)
-                    line = (await session.execute(stmt)).scalar_one()
-                    for word in words:
-                        if word.id not in line.word_ids:
-                            line.word_ids.append(word.id)
-                    session.add(line)
-
-                # Flush to save contexts and line updates
-                await session.flush()
-
-        return processed_words
 
     async def _process_text_to_create_and_update_sentence_entries(
             self,
-            lines: Dict[int, str],
+            lines_dict: Dict[int, str],
             full_text: str,
             language: str,
             video_id: int,
@@ -363,20 +249,153 @@ class SubtitleProcessor:
         await session.flush()
 
         # Now create SentenceData with guaranteed IDs
+        line_ids = list(lines_dict.keys())
+        lines = list(lines_dict.values())
+        logger.info("----- In total lines: ", len(line_ids))
+        logger.info("----- In total sentence: ", len(sentence_objects))
+
+        if language == "zh":
+            all_text = ''.join(lines)
+        else:
+            all_text = ' '.join(lines)
+        current_pos = 0
+
         for sent, sentence_entry in sentence_objects:
             # Find which lines contain this sentence
+            if len(sent.text.strip()) == 0:
+                continue
+
+            # Find where this sentence starts in the complete text
+            sentence_start = all_text.index(sent.text, current_pos)
+            sentence_end = sentence_start + len(sent.text)
+            current_pos = sentence_end
+
+            # Find which lines contain parts of this sentence
+            current_line_start = 0
             line_numbers = []
-            for line_id, line_text in lines.items():
-                if sent.text in line_text:
-                    line_numbers.append(line_id)
+
+            for i, line in enumerate(lines):
+                current_line_end = current_line_start + len(line)
+
+                # Check if this line overlaps with the sentence
+                if (current_line_start < sentence_end and
+                        current_line_end > sentence_start):
+                    line_numbers.append(line_ids[i])  # Append the line ID instead of index
+
+                current_line_start = current_line_end
 
             sentences_data.append(SentenceData(
                 sent=sent,
                 sentence_id=sentence_entry.id,  # Now we have the ID
-                line_numbers=line_numbers
+                line_numbers=line_numbers  # This is going to be updated.
             ))
 
         return sentences_data
+
+    async def _create_and_update_words_contexts_linewordids(
+            self,
+            zh_sentences: List[SentenceData],
+            en_sentences: List[SentenceData],
+            lines_dict: dict[str, dict[int, str]],
+            session: AsyncSession
+    ) -> List[Word]:
+        """Process words and their contexts, return all processed words."""
+        # Step 1: Create all word entries first
+        word_objects = {}  # {sentence_id: [word_objects]}
+        processed_words = []
+
+        # Create words for both languages
+        for sentences, language in [(zh_sentences, "zh"), (en_sentences, "en")]:
+            for sentence_data in sentences:
+                words_in_sentence = []
+                for token in sentence_data.sent:
+                    if not self._is_valid_word_token(token):
+                        continue
+
+                    word = Word(
+                        language=language,
+                        word=token.text,
+                        lemma=token.lemma_,
+                        pos=token.pos_,
+                        translation=None,
+                        complexity=None,
+                        cefr=None,
+                    )
+                    session.add(word)
+                    words_in_sentence.append(word)
+                    processed_words.append(word)
+
+                word_objects[sentence_data.sentence_id] = words_in_sentence
+
+        # Flush to get all word IDs
+        await session.flush()
+
+        # Step 2: Create word contexts by aligning words with lines
+        word_line_sentence = []  # Will store (line_id, sentence_id, word_id) tuples
+
+        for sentences, language in [(zh_sentences, "zh"), (en_sentences, "en")]:
+            lines = lines_dict[language]  # lines: {line_id: line_text}
+
+            # 此处开始循环句子，每次处理一个句子
+            for sentence_data in sentences:
+                # Get words for this sentence
+                sentence_words = word_objects.get(sentence_data.sentence_id, [])
+                if not sentence_words:
+                    continue
+
+                remaining_words = sentence_words.copy()
+                word_idx = 0  # Track which word we're looking for
+
+                # Process each line in the sentence
+                for line_id in sentence_data.line_numbers:
+                    if not remaining_words:  # All words found
+                        break
+
+                    line_text = lines[line_id]
+                    current_pos = 0
+
+                    # Try to find words in order in this line
+                    while remaining_words and current_pos < len(line_text):
+                        word = remaining_words[0]
+                        word_text = word.word
+
+                        # Try to find the word in the current line from current_pos
+                        pos = line_text.find(word_text, current_pos)
+                        if pos != -1:
+                            # Word found, create mapping
+                            word_line_sentence.append((
+                                line_id,
+                                sentence_data.sentence_id,
+                                word.id
+                            ))
+                            
+                            # Move position past this word and remove it from remaining
+                            current_pos = pos + len(word_text)
+                            remaining_words.pop(0)
+                        else:
+                            # Word not found in this line, move to next line
+                            break
+
+                # All words should be found within their sentence's lines
+                assert not remaining_words, (
+                    f"Not all words found for sentence {sentence_data.sentence_id}:\n"
+                    f"Remaining words: {[w.word for w in remaining_words]}\n"
+                    f"Sentence text: {sentence_data.sent.text}\n"
+                    f"Lines: {[lines[lid] for lid in sentence_data.line_numbers]}"
+                )
+
+        # Create all WordContext entries
+        for line_id, sentence_id, word_id in word_line_sentence:
+            context = WordContext(
+                word_id=word_id,
+                line_id=line_id,
+                sentence_id=sentence_id
+            )
+            session.add(context)
+
+        # Final flush to save all WordContext entries
+        await session.flush()
+        return processed_words
 
     @staticmethod
     async def _create_word_entry(
@@ -400,13 +419,13 @@ class SubtitleProcessor:
         return word
 
     @staticmethod
-    async def _is_valid_word_token(token: Token) -> bool:
+    def _is_valid_word_token(token: Token) -> bool:
         """Determine if a token should be processed as a word."""
         return (
                 not token.is_punct and  # Skip punctuation
                 not token.is_space and  # Skip whitespace
-                not token.like_num and  # Skip pure numbers
-                len(token.text.strip()) > 1  # Skip single characters
+                not token.like_num  # Skip pure numbers
+
         )
 
     @staticmethod
