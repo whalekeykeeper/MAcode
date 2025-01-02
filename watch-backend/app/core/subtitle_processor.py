@@ -81,7 +81,6 @@ class SubtitleProcessor:
             zh_sentences=sentence_data_list_zh,
             en_sentences=sentence_data_list_en,
             lines_dict=lines_dict,
-            video_id=video.id,
             session=session
         )
 
