@@ -56,7 +56,7 @@ class Video(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
 
     # YouTube video id
-    ytb_id: Mapped[str] = mapped_column(String(15), nullable=False, unique=True)
+    ytb_id: Mapped[str] = mapped_column(String(20), nullable=False, unique=True)
 
     # YouTube link
     url: Mapped[str] = mapped_column(String(250), nullable=False, unique=True)
@@ -86,9 +86,6 @@ class Line(Base):
     language: Mapped[str] = mapped_column(String(50), nullable=False)
 
     line_text: Mapped[str] = mapped_column(String(500), nullable=False)
-
-    # words contains the word_ids for each word in the line
-    word_ids: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
 
     __table_args__ = (Index("idx_line_language", "language"),)
 
@@ -134,6 +131,9 @@ class Word(Base):
     # cefr level if we find the same (lemma, pos) in the CEFR-J database, otherwise null
     cefr: Mapped[str] = mapped_column(String(10), nullable=True)
 
+    # record the sentence id for the sentence where this word is found
+    sentence_id: Mapped[int] = mapped_column(ForeignKey("sentence_model.id"), nullable=False)
+
     # translation is expected to be extracted from subtitle in the other language in the bilingual subtitle.
     # We will use NLP method to align words, but when this is not possible, we will send the word and the context to query with Gemini API.
     translation: Mapped[str] = mapped_column(String(50), nullable=True)
@@ -157,25 +157,23 @@ class WordContext(Base):
     sentence_id: Mapped[int] = mapped_column(ForeignKey("sentence_model.id"), nullable=False)
 
 
-class ChosenWord(Base):
+class ChosenWords(Base):
     """
-    To collect chosen line by pressing space bar.
-    We store the words in the line so that we can build a collection of words for future use.
+    To collect chosen words by pressing space bar.
+    We store the words in the chosen line so that we can build a collection of words for future use.
     """
 
-    __tablename__ = "chosen_word_model"
+    __tablename__ = "chosen_words_model"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("user_model.id"), nullable=False)
 
-    # Even if a word is chosen multiple times, we only store one record for each word.
-    word_id: Mapped[int] = mapped_column(ForeignKey("word_model.id"), nullable=False, unique=True)
+    # Even if a word is chosen multiple times, we only store its id once here.
+    word_id: Mapped[int] = mapped_column(ForeignKey("word_model.id"), nullable=False)
 
-    # The sentence which contains the word when the word is chosen.
-    sentence_id: Mapped[int] = mapped_column(ForeignKey("sentence_model.id"), nullable=False)
-
-    # To allow user to mark the word as learned in the frontend.
-    marked_as_learned: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # marked_as_learned is used to mark the word as learned by the user in the frontend, only available for the user
+    # in the wordlist page. It is user-specific.
+    marked_as_learned: Mapped[bool] = mapped_column(Boolean, nullable=True, default=False)
 
     # record_time is the time when the word is chosen so that we can sort the words by time.
     record_time: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=func.now)
