@@ -124,9 +124,11 @@ class SubtitleProcessor:
         # Get video and user
         stmt = select(Video).where(Video.ytb_id == ytb_id)
         video = (await session.execute(stmt)).scalar_one()
+        logger.info(f"Found video: {video.id}")
 
         stmt = select(User).where(User.uuid == user_uuid)
         user = (await session.execute(stmt)).scalar_one()
+        logger.info(f"Found user: {user.id}")
 
         # Full processing for a new video
         logger.info(f"\nProcessing new video {ytb_id}...")
@@ -144,21 +146,25 @@ class SubtitleProcessor:
             await self._create_sentence_word_entries(
                 sentence_collection, token_collection, language, video.id, session)
 
-        print(f"length of full_zh_text: {len(full_zh_text)}")
-        # Update word_ids for video and user
+        # Debug: Print current state
+        logger.info(f"Before update - Video texts: ZH({len(video.full_zh_text) if video.zh_text else 0}), "
+                    f"EN({len(video.full_en_text) if video.en_text else 0})")
+        logger.info(f"Before update - User video_ids: {user.video_ids}")
 
         # Update full_zh_text and full_en_text for video
-        video.full_zh_text = full_zh_text
-        video.full_en_text = full_en_text
+        video.zh_text = full_zh_text
+        video.en_text = full_en_text
 
         # Update video_ids for user
         user.video_ids.append(video.id)
-        user.video_ids = list(set(user.video_ids))
-
-        session.add(user)
+        
         session.add(video)
+        session.add(user)
         await session.flush()
-        # Commit all change
+
+        # Commit all changes
+        await session.commit()
+        logger.info("Changes committed to database")
 
         return video.vtt_path
 
