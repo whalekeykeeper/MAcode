@@ -9,16 +9,14 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.logger import logger
-from app.models import (
-    Word
-)
 
 
 @dataclass
 class SubtitleLine:
     """Represents a line from bilingual subtitles."""
     line_number: int
-    timestamp: str
+    start_timestamp: str
+    end_timestamp: str
     zh_text: Optional[str]
     en_text: Optional[str]
 
@@ -29,6 +27,86 @@ class SentenceData:
     sent: spacy.tokens.Span
     sentence_id: int
     line_numbers: List[int]
+
+
+def analyze_text(lines_dict: dict[int, str], language: str) -> Tuple[List[Dict[str, List[int]]], List[Dict[str, str]]]:
+    """
+    Analyzes the text to map sentences and tokens to lines.
+
+    Args:
+        lines_dict: Dictionary where keys are unique line IDs and values are the text lines
+        language: The language of the text (either "zh" or "en")
+
+    Returns:
+        - A collection of sentences where each sentence has:
+          line_ids and sentence_text.
+        - A collection of tokens where each token has:
+          line_id, text, lemma, and pos.
+    """
+    nlp_en = spacy.load("en_core_web_lg")
+    nlp_zh = spacy.load("zh_core_web_lg")
+    nlp = nlp_zh if language == "zh" else nlp_en
+    doc = nlp(''.join(lines_dict.values()))
+
+    sentence_collection = []
+    token_collection = []
+
+    # Convert dictionary values to list while keeping track of IDs
+    line_ids = list(lines_dict.keys())
+    lines = list(lines_dict.values())
+
+    all_text = ''.join(lines)
+    current_pos = 0
+
+    # Map sentences to lines
+    for sentence_id, sent in enumerate(doc.sents, start=1):
+        sentence = sent.text
+        sentence_start = all_text.index(sentence, current_pos)
+        sentence_end = sentence_start + len(sentence)
+        current_pos = sentence_end
+
+        current_line_start = 0
+        sentence_lines = []
+
+        for i, line in enumerate(lines):
+            current_line_end = current_line_start + len(line)
+
+            # Check if this line overlaps with the sentence
+            if (current_line_start < sentence_end and
+                    current_line_end > sentence_start):
+                sentence_lines.append(line_ids[i])  # Append the line ID
+
+            current_line_start = current_line_end
+
+        sentence_collection.append({
+            "line_ids": sentence_lines,
+            "sentence_text": sentence
+        })
+
+    # Map tokens to lines
+    current_line_start = 0
+    for i, line in enumerate(lines):
+        current_line_end = current_line_start + len(line)
+        line_id = line_ids[i]
+
+        # Find tokens within this line
+        for token in doc:
+            token_start = token.idx
+            token_end = token_start + len(token.text)
+
+            if (current_line_start <= token_start < current_line_end or
+                    current_line_start < token_end <= current_line_end or
+                    (token_start < current_line_start and token_end > current_line_end)):
+                token_collection.append({
+                    "line_id": line_id,
+                    "text": token.text,
+                    "lemma": token.lemma_,
+                    "pos": token.pos_
+                })
+
+        current_line_start = current_line_end
+
+    return sentence_collection, token_collection
 
 
 class SubtitleProcessor:
@@ -46,9 +124,11 @@ class SubtitleProcessor:
         # Get video and user
         stmt = select(Video).where(Video.ytb_id == ytb_id)
         video = (await session.execute(stmt)).scalar_one()
+        logger.info(f"Found video: {video.id}")
 
         stmt = select(User).where(User.uuid == user_uuid)
         user = (await session.execute(stmt)).scalar_one()
+        logger.info(f"Found user: {user.id}")
 
         # Full processing for a new video
         logger.info(f"\nProcessing new video {ytb_id}...")
@@ -56,47 +136,68 @@ class SubtitleProcessor:
         subtitle_lines, full_zh_text, full_en_text = (
             self._parse_subtitle_file(video.vtt_path))
 
-        # Update columns zh_text and en_text for this video object.
-        video.full_zh_text = full_zh_text
-        video.full_en_text = full_en_text
-        session.add(video)
-        await session.flush()
-
         # Create lines (word_ids are empty for now) and return a mapping.
-        lines_dict = await self._create_line_entries(subtitle_lines, video.id, session)
+        lines_dict_bi = await self._create_line_entries(subtitle_lines, video.id, session)
 
-        # Create sentence entries (all fields updated)
-        lines_zh = lines_dict['zh']
-        sentence_data_list_zh = await self._process_text_to_create_and_update_sentence_entries(
-            lines_zh, full_zh_text, "zh", video.id, session
-        )
+        # Parse lines_dict to get sentences and tokens
+        for language in ["zh", "en"]:
+            sentence_collection, token_collection = analyze_text(lines_dict_bi[language], language)
+            # Create sentence entries and word entries basing on sentence_data_list and token_data_list
+            await self._create_sentence_word_entries(
+                sentence_collection, token_collection, language, video.id, session)
 
-        lines_en = lines_dict['en']
-        sentence_data_list_en = await self._process_text_to_create_and_update_sentence_entries(
-            lines_en, full_en_text, "en", video.id, session
-        )
+        # Debug: Print current state
+        logger.info(f"Before update - Video texts: ZH({len(video.zh_text) if video.zh_text else 0}), "
+                    f"EN({len(video.en_text) if video.en_text else 0})")
+        logger.info(f"Before update - User video_ids: {user.video_ids}")
 
-        words = await self._create_and_update_words_contexts_linewordids(
-            zh_sentences=sentence_data_list_zh,
-            en_sentences=sentence_data_list_en,
-            lines_dict=lines_dict,
-            session=session
-        )
+        # Update full_zh_text and full_en_text for video
+        video.zh_text = full_zh_text
+        video.en_text = full_en_text
 
-        # Update user and video word associations
-        word_ids = [word.id for word in words]
-        user.word_ids.extend(word_ids)
-        video.word_ids.extend(word_ids)
-        user.video_ids.append(video.id)
+        # Update video_ids for user
+        if user.video_ids is None:
+            user.video_ids = []
+        user.video_ids = list(set(user.video_ids + [video.id]))  # Ensure unique video IDs
 
-        # Ensure no duplicates
-        user.word_ids = list(set(user.word_ids))
-        video.word_ids = list(set(video.word_ids))
-        user.video_ids = list(set(user.video_ids))
-
-        session.add(user)
         session.add(video)
+        session.add(user)
         await session.flush()
+        await session.commit()
+
+        # Here update word_ids for video and user
+        # Get all words for this video
+        stmt = select(Word.id).where(Word.video_id == video.id)
+        result = await session.execute(stmt)
+        video_word_ids = [row[0] for row in result]
+
+        # Update video's word_ids
+        if video.word_ids is None:
+            video.word_ids = []
+        video.word_ids = list(set(video.word_ids + video_word_ids))  # Ensure unique word IDs
+        # Update user's word_ids
+        if user.word_ids is None:
+            user.word_ids = []
+        user.word_ids = list(set(user.word_ids + video_word_ids))  # Ensure unique word IDs
+
+        logger.info(f"Added {len(video_word_ids)} words to video and user")
+        logger.info(f"Video now has {len(video.word_ids)} total words")
+        logger.info(f"User now has {len(user.word_ids)} total words")
+
+        # Final commit for all changes
+        session.add(video)
+        session.add(user)
+        await session.flush()
+        await session.commit()
+
+        # Verify the updates
+        await session.refresh(video)
+        await session.refresh(user)
+        logger.info("\nFinal state verification:")
+
+        logger.info(f"Video word_ids count: {len(video.word_ids) if video.word_ids else 0}")
+        logger.info(f"User video_ids: {user.video_ids}")
+        logger.info(f"User word_ids count: {len(user.word_ids) if user.word_ids else 0}")
 
         return video.vtt_path
 
@@ -154,7 +255,8 @@ class SubtitleProcessor:
                 # Store original text in subtitle_lines
                 subtitle_lines.append(SubtitleLine(
                     line_number=i + 1,
-                    timestamp=caption.start,
+                    start_timestamp=caption.start,
+                    end_timestamp=caption.end,
                     zh_text=zh_text,
                     en_text=en_text
                 ))
@@ -162,10 +264,8 @@ class SubtitleProcessor:
             # Join texts without extra spaces for Chinese, with spaces for English
             full_zh_text = ''.join(zh_texts)
             full_en_text = ' '.join(en_texts)
-            # marked_full_zh_text = ''.join(marked_zh_texts)
-            # marked_full_en_text = ' '.join(marked_en_texts)
 
-            return subtitle_lines, full_zh_text, full_en_text  # , marked_full_zh_text, marked_full_en_text
+            return subtitle_lines, full_zh_text, full_en_text
 
         except Exception as e:
             logger.error(f"Error reading subtitle file: {str(e)}")
@@ -178,7 +278,7 @@ class SubtitleProcessor:
             session: AsyncSession
     ) -> dict[str, dict[int, str]]:
         """Create Line entries for each subtitle line and return a mapping."""
-        lines = {}
+        lines_dict_bi = {}
         lines_zh = {}
         lines_en = {}
 
@@ -190,6 +290,8 @@ class SubtitleProcessor:
                     video_id=video_id,
                     language="zh",
                     line_text=line.zh_text,
+                    start_timestamp=line.start_timestamp,
+                    end_timestamp=line.end_timestamp
                 )
                 session.add(zh_line)
                 line_objects.append(("zh", zh_line))
@@ -199,6 +301,8 @@ class SubtitleProcessor:
                     video_id=video_id,
                     language="en",
                     line_text=line.en_text,
+                    start_timestamp=line.start_timestamp,
+                    end_timestamp=line.end_timestamp
                 )
                 session.add(en_line)
                 line_objects.append(("en", en_line))
@@ -213,222 +317,48 @@ class SubtitleProcessor:
             else:
                 lines_en[line_obj.id] = line_obj.line_text  # Here we can access line_obj.id
 
-        lines['zh'] = lines_zh
-        lines['en'] = lines_en
-        return lines
+        lines_dict_bi['zh'] = lines_zh
+        lines_dict_bi['en'] = lines_en
+        return lines_dict_bi
 
-    async def _process_text_to_create_and_update_sentence_entries(
-            self,
-            lines_dict: Dict[int, str],
-            full_text: str,
+    @staticmethod
+    async def _create_sentence_word_entries(
+            sentence_collection: List[Dict[str, List[int]]],
+            token_collection: List[Dict[str, str]],
             language: str,
             video_id: int,
             session: AsyncSession
-    ) -> List[SentenceData]:
-        """Process text to extract sentences and create Sentence entries."""
-        sentences_data = []
-        nlp = self.nlp_zh if language == "zh" else self.nlp_en
-        doc = nlp(full_text)
+    ) -> None:
 
-        sentence_objects = []
-        for sent in doc.sents:
-            # Create Sentence entry
+        """Create Sentence and Word entries for each sentence and token."""
+        # Create all Sentence objects
+        for sent in sentence_collection:
             sentence_entry = Sentence(
                 video_id=video_id,
                 language=language,
-                sentence_text=sent.text.strip()
+                line_ids=sent['line_ids'],
+                sentence_text=sent['sentence_text']
             )
             session.add(sentence_entry)
-            sentence_objects.append((sent, sentence_entry))
-
         # Flush to get all sentence IDs
         await session.flush()
-        sentences = {}
-        for (sent, sentence_entry) in sentence_objects:
-            sentences[sentence_entry.id] = sent
 
-        # Now we want to use variable sentences to create word entries and objects
-        word_objects = []
-        for sentence_id, sent in sentences.items():
-            for token in sent:
-                if not self._is_valid_word_token(token):
-                    continue
+        # Create all Word objects
+        for token_data in token_collection:
+            # Create word object
+            word = Word(
 
-                word_entry = Word(
-                    language=language,
-                    word=token.text,
-                    lemma=token.lemma_,
-                    pos=token.pos_,
-                    sentence_id=sentence_id
-                )
-                session.add(word_entry)
-                word_objects.append((sentence_id, word_entry))
-        # Flush to get all word IDs
-        await session.flush()
-        #
-        # # Now create SentenceData with guaranteed IDs
-        # line_ids = list(lines_dict.keys())
-        # lines = list(lines_dict.values())
-        # logger.info("----- In total lines: ", len(line_ids))
-        # logger.info("----- In total sentence: ", len(sentence_objects))
-        #
-        # if language == "zh":
-        #     all_text = ''.join(lines)
-        # else:
-        #     all_text = ' '.join(lines)
-        # current_pos = 0
-        #
-        # for sent, sentence_entry in sentence_objects:
-        #     # Find which lines contain this sentence
-        #     if len(sent.text.strip()) == 0:
-        #         continue
-        #
-        #     # Find where this sentence starts in the complete text
-        #     sentence_start = all_text.index(sent.text, current_pos)
-        #     sentence_end = sentence_start + len(sent.text)
-        #     current_pos = sentence_end
-        #
-        #     # Find which lines contain parts of this sentence
-        #     current_line_start = 0
-        #     line_numbers = []
-        #
-        #     for i, line in enumerate(lines):
-        #         current_line_end = current_line_start + len(line)
-        #
-        #         # Check if this line overlaps with the sentence
-        #         if (current_line_start < sentence_end and
-        #                 current_line_end > sentence_start):
-        #             line_numbers.append(line_ids[i])  # Append the line ID instead of index
-        #
-        #         current_line_start = current_line_end
-        #
-        #     sentences_data.append(SentenceData(
-        #         sent=sent,
-        #         sentence_id=sentence_entry.id,  # Now we have the ID
-        #         line_numbers=line_numbers  # This is going to be updated.
-        #     ))
-
-        return sentences_data
-
-    async def _create_and_update_words_contexts_linewordids(
-            self,
-            zh_sentences: List[SentenceData],
-            en_sentences: List[SentenceData],
-            lines_dict: dict[str, dict[int, str]],
-            session: AsyncSession
-    ) -> List[Word]:
-        """Process words and their contexts, return all processed words."""
-        # Step 1: Create all word entries first
-        word_objects = {}  # {sentence_id: [word_objects]}
-        processed_words = []
-
-        # Create words for both languages
-        for sentences, language in [(zh_sentences, "zh"), (en_sentences, "en")]:
-            for sentence_data in sentences:
-                words_in_sentence = []
-                for token in sentence_data.sent:
-                    if not self._is_valid_word_token(token):
-                        continue
-
-                    word = Word(
-                        language=language,
-                        word=token.text,
-                        lemma=token.lemma_,
-                        pos=token.pos_,
-                    )
-                    session.add(word)
-                    words_in_sentence.append(word)
-                    processed_words.append(word)
-
-                word_objects[sentence_data.sentence_id] = words_in_sentence
-
-        # Flush to get all word IDs
-        await session.flush()
-
-        # Step 2: Create word contexts by aligning words with lines
-        word_line_sentence = []  # Will store (line_id, sentence_id, word_id) tuples
-
-        for sentences, language in [(zh_sentences, "zh"), (en_sentences, "en")]:
-            lines = lines_dict[language]  # lines: {line_id: line_text}
-
-            # 此处开始循环句子，每次处理一个句子
-            for sentence_data in sentences:
-                # Get words for this sentence
-                sentence_words = word_objects.get(sentence_data.sentence_id, [])
-                if not sentence_words:
-                    continue
-
-                remaining_words = sentence_words.copy()
-                word_idx = 0  # Track which word we're looking for
-
-                # Process each line in the sentence
-                for line_id in sentence_data.line_numbers:
-                    if not remaining_words:  # All words found
-                        break
-
-                    line_text = lines[line_id]
-                    current_pos = 0
-
-                    # Try to find words in order in this line
-                    while remaining_words and current_pos < len(line_text):
-                        word = remaining_words[0]
-                        word_text = word.word
-
-                        # Try to find the word in the current line from current_pos
-                        pos = line_text.find(word_text, current_pos)
-                        if pos != -1:
-                            # Word found, create mapping
-                            word_line_sentence.append((
-                                line_id,
-                                sentence_data.sentence_id,
-                                word.id
-                            ))
-
-                            # Move position past this word and remove it from remaining
-                            current_pos = pos + len(word_text)
-                            remaining_words.pop(0)
-                        else:
-                            # Word not found in this line, move to next line
-                            break
-
-                # All words should be found within their sentence's lines
-                assert not remaining_words, (
-                    f"Not all words found for sentence {sentence_data.sentence_id}:\n"
-                    f"Remaining words: {[w.word for w in remaining_words]}\n"
-                    f"Sentence text: {sentence_data.sent.text}\n"
-                    f"Lines: {[lines[lid] for lid in sentence_data.line_numbers]}"
-                )
-
-        # Create all WordContext entries
-        for line_id, sentence_id, word_id in word_line_sentence:
-            context = WordContext(
-                word_id=word_id,
-                line_id=line_id,
-                sentence_id=sentence_id
+                language=language,
+                word=token_data['text'],
+                lemma=token_data['lemma'],
+                pos=token_data['pos'],
+                line_id=token_data['line_id'],
+                video_id=video_id
             )
-            session.add(context)
+            session.add(word)
 
-        # Final flush to save all WordContext entries
+        # Final flush to save all Word and WordContext entries
         await session.flush()
-        return processed_words
-
-    @staticmethod
-    async def _create_word_entry(
-            token: Token,
-            clean_text: str,
-            language: str,
-            session: AsyncSession
-    ) -> Word:
-        """Create new word entry with clean text."""
-        word = Word(
-            language=language,
-            word=clean_text,
-            lemma=token.lemma_,
-            pos=token.pos_,
-        )
-        session.add(word)
-        await session.flush()
-        return word
 
     @staticmethod
     def _is_valid_word_token(token: Token) -> bool:
@@ -438,20 +368,6 @@ class SubtitleProcessor:
                 not token.is_space and  # Skip whitespace
                 not token.like_num  # Skip pure numbers
         )
-
-    @staticmethod
-    async def _add_subtitle_line(
-            text: str, language: str, video_id: int, session: AsyncSession
-    ) -> int:
-        """Create a new Line entry."""
-        line = Line(
-            video_id=video_id,
-            language=language,
-            line_text=text,
-            word_ids=[]
-        )
-        session.add(line)
-        return line.id
 
 
 if __name__ == "__main__":
@@ -470,7 +386,7 @@ if __name__ == "__main__":
     from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
     from sqlalchemy.orm import sessionmaker
 
-    from app.models import User, Video, Word, Line, Sentence, WordContext
+    from app.models import User, Video, Word, Line, Sentence
 
     # Load environment variables
     load_dotenv()
@@ -543,31 +459,6 @@ if __name__ == "__main__":
                 )
                 print(f"Processed subtitles for video: {vtt_processed_path}")
 
-                # Test Scenario 2: Existing video, new user
-                print("\n=== Scenario 2: Existing video, new user ===")
-                user2 = User(uuid=str(uuid4()))
-                session.add(user2)
-                await session.flush()
-                print(f"Created second user with UUID: {user2.uuid}")
-
-                # Associate video with second user
-                video1.word_ids.extend(video1.word_ids)  # Assuming words are already processed
-                user2.word_ids.extend(video1.word_ids)
-                user2.video_ids.append(video1.id)
-
-                await session.flush()
-                print(f"Associated video ID {video1.id} with user ID {user2.id}")
-
-                # Test Scenario 3: Existing video, existing user
-                print("\n=== Scenario 3: Existing video, existing user ===")
-                # Attempt to process subtitles again for user1 (should handle idempotency)
-                vtt_processed_path = await processor.process_subtitles(
-                    ytb_id=ytb_id,
-                    user_uuid=user1.uuid,
-                    session=session
-                )
-                print(f"Re-processed subtitles for video: {vtt_processed_path}")
-
                 # Commit all changes
                 await session.commit()
 
@@ -579,7 +470,8 @@ if __name__ == "__main__":
                 print(f"\nTop 10 Words:")
                 for word in words:
                     print(
-                        f"ID: {word.id}, Language: {word.language}, Word: {word.word}, POS: {word.pos}, Lemma: {word.lemma}")
+                        f"ID: {word.id}, Language: {word.language}, Word: {word.word}, POS: {word.pos}, "
+                        f"Lemma: {word.lemma}, Line ID: {word.line_id}, Video ID: {word.video_id}")
 
                 # Top 10 Lines
                 lines = (await session.execute(select(Line).order_by(Line.id.asc()).limit(10))).scalars().all()
@@ -592,15 +484,8 @@ if __name__ == "__main__":
                     await session.execute(select(Sentence).order_by(Sentence.id.asc()).limit(10))).scalars().all()
                 print(f"\nTop 10 Sentences:")
                 for sentence in sentences:
-                    print(f"ID: {sentence.id}, Language: {sentence.language}, Sentence Text: {sentence.sentence_text}")
-
-                # Top 10 WordContexts
-                contexts = (
-                    await session.execute(select(WordContext).order_by(WordContext.id.asc()).limit(10))).scalars().all()
-                print(f"\nTop 10 WordContexts:")
-                for context in contexts:
-                    print(
-                        f"ID: {context.id}, Word ID: {context.word_id}, Line ID: {context.line_id}, Sentence ID: {context.sentence_id}")
+                    print(f"ID: {sentence.id}, Language: {sentence.language}, Sentence Text: "
+                          f"{sentence.sentence_text}, Line IDs: {sentence.line_ids}")
 
                 # Top 10 Users
                 users = (await session.execute(select(User).order_by(User.id.asc()).limit(10))).scalars().all()
@@ -613,7 +498,9 @@ if __name__ == "__main__":
                 print(f"\nTop 10 Videos:")
                 for video in videos:
                     print(
-                        f"ID: {video.id}, YouTube ID: {video.ytb_id}, URL: {video.url}, Video Path: {video.video_path}, VTT Path: {video.vtt_path}, Word IDs: {video.word_ids}")
+                        f"ID: {video.id}, YouTube ID: {video.ytb_id}, URL: {video.url}, Video Path: "
+                        f"{video.video_path}, VTT Path: {video.vtt_path}, Word IDs: {video.word_ids}",
+                        f"ZH Text: {video.zh_text}, EN Text: {video.en_text}")
 
                 print("\nTest completed successfully!")
 
@@ -624,20 +511,13 @@ if __name__ == "__main__":
 
 
     """
-    Command to re-initialize the database:
-    docker compose down -v
-    docker compose up -d
-    rm -rf alembic/versions/*
-    alembic revision --autogenerate -m "initial"
-    alembic upgrade head
-    
     Expected:
     Final Database Statistics:
     Words: 654
     Lines: 157
     Sentences: 77
     Word Contexts: 517
-    
+
     """
 
     # Run the test

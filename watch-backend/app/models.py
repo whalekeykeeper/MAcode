@@ -84,9 +84,9 @@ class Line(Base):
 
     # language should be simplified Chinese if before "§§§", English if after "§§§".
     language: Mapped[str] = mapped_column(String(50), nullable=False)
-
     line_text: Mapped[str] = mapped_column(String(500), nullable=False)
-
+    start_timestamp: Mapped[str] = mapped_column(String(100), nullable=False)
+    end_timestamp: Mapped[str] = mapped_column(String(100), nullable=False)
     __table_args__ = (Index("idx_line_language", "language"),)
 
 
@@ -102,6 +102,7 @@ class Sentence(Base):
 
     # language should be simplified Chinese if before "§§§", English if after "§§§".
     language: Mapped[str] = mapped_column(String(50), nullable=False)
+    line_ids: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
     sentence_text: Mapped[str] = mapped_column(String(500), nullable=False)
 
     __table_args__ = (Index("idx_sentence_video_language", "video_id", "language"),)
@@ -116,7 +117,7 @@ class Word(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
 
-    # languge should be either simplified Chinese or English. 
+    # languge should be either simplified Chinese or English.
     # We use "zh" for simplified Chinese and "en" for English.
     language: Mapped[str] = mapped_column(String(50), nullable=False)
 
@@ -131,8 +132,10 @@ class Word(Base):
     # cefr level if we find the same (lemma, pos) in the CEFR-J database, otherwise null
     cefr: Mapped[str] = mapped_column(String(10), nullable=True)
 
-    # record the sentence id for the sentence where this word is found
-    sentence_id: Mapped[int] = mapped_column(ForeignKey("sentence_model.id"), nullable=False)
+    # record the line id for the line where this word is found
+    line_id: Mapped[int] = mapped_column(ForeignKey("line_model.id"), nullable=False)
+
+    video_id: Mapped[int] = mapped_column(ForeignKey("video_model.id"), nullable=False)
 
     # translation is expected to be extracted from subtitle in the other language in the bilingual subtitle.
     # We will use NLP method to align words, but when this is not possible, we will send the word and the context to query with Gemini API.
@@ -144,18 +147,7 @@ class Word(Base):
     __table_args__ = (
         Index('idx_word_language_word', 'language', 'word'),
     )
-
-
-class WordContext(Base):
-    """
-    Context-specific data for a word.
-    """
-    __tablename__ = "word_context_model"
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    word_id: Mapped[int] = mapped_column(ForeignKey("word_model.id"), nullable=False)
-    line_id: Mapped[int] = mapped_column(ForeignKey("line_model.id"), nullable=False)
-    sentence_id: Mapped[int] = mapped_column(ForeignKey("sentence_model.id"), nullable=False)
-
+    
 
 class ChosenWords(Base):
     """
