@@ -230,7 +230,6 @@ class SubtitleProcessor:
         nlp = self.nlp_zh if language == "zh" else self.nlp_en
         doc = nlp(full_text)
 
-        # Create all sentence objects first
         sentence_objects = []
         for sent in doc.sents:
             # Create Sentence entry
@@ -244,48 +243,70 @@ class SubtitleProcessor:
 
         # Flush to get all sentence IDs
         await session.flush()
+        sentences = {}
+        for (sent, sentence_entry) in sentence_objects:
+            sentences[sentence_entry.id] = sent
 
-        # Now create SentenceData with guaranteed IDs
-        line_ids = list(lines_dict.keys())
-        lines = list(lines_dict.values())
-        logger.info("----- In total lines: ", len(line_ids))
-        logger.info("----- In total sentence: ", len(sentence_objects))
+        # Now we want to use variable sentences to create word entries and objects
+        word_objects = []
+        for sentence_id, sent in sentences.items():
+            for token in sent:
+                if not self._is_valid_word_token(token):
+                    continue
 
-        if language == "zh":
-            all_text = ''.join(lines)
-        else:
-            all_text = ' '.join(lines)
-        current_pos = 0
-
-        for sent, sentence_entry in sentence_objects:
-            # Find which lines contain this sentence
-            if len(sent.text.strip()) == 0:
-                continue
-
-            # Find where this sentence starts in the complete text
-            sentence_start = all_text.index(sent.text, current_pos)
-            sentence_end = sentence_start + len(sent.text)
-            current_pos = sentence_end
-
-            # Find which lines contain parts of this sentence
-            current_line_start = 0
-            line_numbers = []
-
-            for i, line in enumerate(lines):
-                current_line_end = current_line_start + len(line)
-
-                # Check if this line overlaps with the sentence
-                if (current_line_start < sentence_end and
-                        current_line_end > sentence_start):
-                    line_numbers.append(line_ids[i])  # Append the line ID instead of index
-
-                current_line_start = current_line_end
-
-            sentences_data.append(SentenceData(
-                sent=sent,
-                sentence_id=sentence_entry.id,  # Now we have the ID
-                line_numbers=line_numbers  # This is going to be updated.
-            ))
+                word_entry = Word(
+                    language=language,
+                    word=token.text,
+                    lemma=token.lemma_,
+                    pos=token.pos_,
+                    sentence_id=sentence_id
+                )
+                session.add(word_entry)
+                word_objects.append((sentence_id, word_entry))
+        # Flush to get all word IDs
+        await session.flush()
+        #
+        # # Now create SentenceData with guaranteed IDs
+        # line_ids = list(lines_dict.keys())
+        # lines = list(lines_dict.values())
+        # logger.info("----- In total lines: ", len(line_ids))
+        # logger.info("----- In total sentence: ", len(sentence_objects))
+        #
+        # if language == "zh":
+        #     all_text = ''.join(lines)
+        # else:
+        #     all_text = ' '.join(lines)
+        # current_pos = 0
+        #
+        # for sent, sentence_entry in sentence_objects:
+        #     # Find which lines contain this sentence
+        #     if len(sent.text.strip()) == 0:
+        #         continue
+        #
+        #     # Find where this sentence starts in the complete text
+        #     sentence_start = all_text.index(sent.text, current_pos)
+        #     sentence_end = sentence_start + len(sent.text)
+        #     current_pos = sentence_end
+        #
+        #     # Find which lines contain parts of this sentence
+        #     current_line_start = 0
+        #     line_numbers = []
+        #
+        #     for i, line in enumerate(lines):
+        #         current_line_end = current_line_start + len(line)
+        #
+        #         # Check if this line overlaps with the sentence
+        #         if (current_line_start < sentence_end and
+        #                 current_line_end > sentence_start):
+        #             line_numbers.append(line_ids[i])  # Append the line ID instead of index
+        #
+        #         current_line_start = current_line_end
+        #
+        #     sentences_data.append(SentenceData(
+        #         sent=sent,
+        #         sentence_id=sentence_entry.id,  # Now we have the ID
+        #         line_numbers=line_numbers  # This is going to be updated.
+        #     ))
 
         return sentences_data
 
@@ -416,7 +437,6 @@ class SubtitleProcessor:
                 not token.is_punct and  # Skip punctuation
                 not token.is_space and  # Skip whitespace
                 not token.like_num  # Skip pure numbers
-
         )
 
     @staticmethod
