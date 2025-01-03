@@ -94,6 +94,10 @@ class Line(Base):
 
     # language should be simplified Chinese if before "§§§", English if after "§§§".
     language: Mapped[str] = mapped_column(String(50), nullable=False)
+
+    # original line number in the subtitle file, so that we can align lines in two languages.
+    original_line_number: Mapped[int] = mapped_column(Integer, nullable=False)
+
     line_text: Mapped[str] = mapped_column(String(500), nullable=False)
     start_timestamp: Mapped[str] = mapped_column(String(100), nullable=False)
     end_timestamp: Mapped[str] = mapped_column(String(100), nullable=False)

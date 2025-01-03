@@ -255,14 +255,8 @@ class SubtitleProcessor:
                     zh_text = zh_text.strip()
                     en_text = en_text.strip()
                 else:
-                    # Handle single language case
-                    text = caption.text.strip()
-                    if any("\u4e00" <= char <= "\u9fff" for char in text):
-                        zh_text = text
-                        en_text = None
-                    else:
-                        zh_text = None
-                        en_text = text
+                    # For single language line, ignore it, to make sure we have bilingual lines only
+                    continue
 
                 if zh_text:
                     # TODO: for Chinese subtitles that the line which contains "翻译人员" and/or "校对人员" in TED Talks' videos
@@ -317,6 +311,7 @@ class SubtitleProcessor:
                     line_text=line.zh_text,
                     start_timestamp=line.start_timestamp,
                     end_timestamp=line.end_timestamp,
+                    original_line_number=line.line_number,
                 )
                 session.add(zh_line)
                 line_objects.append(("zh", zh_line))
@@ -328,6 +323,7 @@ class SubtitleProcessor:
                     line_text=line.en_text,
                     start_timestamp=line.start_timestamp,
                     end_timestamp=line.end_timestamp,
+                    original_line_number=line.line_number,
                 )
                 session.add(en_line)
                 line_objects.append(("en", en_line))
