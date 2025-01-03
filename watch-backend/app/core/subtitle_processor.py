@@ -336,8 +336,10 @@ class SubtitleProcessor:
         # Flush to get all sentence IDs
         await session.flush()
 
+        logger.info(f"Created {len(sentence_collection)} sentences for {language}.")
         # Create all Word objects
         for token_data in token_collection:
+            # Calculate the CEFR level
             # Create word object
             word = Word(
 
@@ -347,9 +349,11 @@ class SubtitleProcessor:
                 pos=token_data['pos'],
                 line_id=token_data['line_id'],
                 video_id=video_id
+                word=token_data["text"],
             )
             session.add(word)
 
+        logger.info(f"Created {len(token_collection)} words for {language}.")
         # Final flush to save all Word and WordContext entries
         await session.flush()
 
