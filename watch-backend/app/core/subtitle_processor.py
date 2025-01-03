@@ -9,6 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.logger import logger
+from app.models import User, Video
 
 
 @dataclass
@@ -146,31 +147,29 @@ class SubtitleProcessor:
             await self._create_sentence_word_entries(
                 sentence_collection, token_collection, language, video.id, session)
 
-        # Debug: Print current state
-        logger.info(f"Before update - Video texts: ZH({len(video.zh_text) if video.zh_text else 0}), "
-                    f"EN({len(video.en_text) if video.en_text else 0})")
-        logger.info(f"Before update - User video_ids: {user.video_ids}")
+        await self._update_word_ids_and_texts(video, user, full_zh_text, full_en_text, session)
 
+        return video.vtt_path
+
+    @staticmethod
+    async def _update_word_ids_and_texts(video: Video, user: User, full_zh_text: str, full_en_text: str,
+                                         session: AsyncSession) -> None:
         # Update full_zh_text and full_en_text for video
         video.zh_text = full_zh_text
         video.en_text = full_en_text
-
         # Update video_ids for user
         if user.video_ids is None:
             user.video_ids = []
         user.video_ids = list(set(user.video_ids + [video.id]))  # Ensure unique video IDs
-
         session.add(video)
         session.add(user)
         await session.flush()
         await session.commit()
-
         # Here update word_ids for video and user
         # Get all words for this video
         stmt = select(Word.id).where(Word.video_id == video.id)
         result = await session.execute(stmt)
         video_word_ids = [row[0] for row in result]
-
         # Update video's word_ids
         if video.word_ids is None:
             video.word_ids = []
@@ -179,27 +178,21 @@ class SubtitleProcessor:
         if user.word_ids is None:
             user.word_ids = []
         user.word_ids = list(set(user.word_ids + video_word_ids))  # Ensure unique word IDs
-
         logger.info(f"Added {len(video_word_ids)} words to video and user")
         logger.info(f"Video now has {len(video.word_ids)} total words")
         logger.info(f"User now has {len(user.word_ids)} total words")
-
         # Final commit for all changes
         session.add(video)
         session.add(user)
         await session.flush()
         await session.commit()
-
-        # Verify the updates
-        await session.refresh(video)
-        await session.refresh(user)
-        logger.info("\nFinal state verification:")
-
-        logger.info(f"Video word_ids count: {len(video.word_ids) if video.word_ids else 0}")
-        logger.info(f"User video_ids: {user.video_ids}")
-        logger.info(f"User word_ids count: {len(user.word_ids) if user.word_ids else 0}")
-
-        return video.vtt_path
+        # # Verify the updates
+        # await session.refresh(video)
+        # await session.refresh(user)
+        # logger.info("\nFinal state verification:")
+        # logger.info(f"Video word_ids count: {len(video.word_ids) if video.word_ids else 0}")
+        # logger.info(f"User video_ids: {user.video_ids}")
+        # logger.info(f"User word_ids count: {len(user.word_ids) if user.word_ids else 0}")
 
     def _parse_subtitle_file(self, subtitle_path: str) -> Tuple[List[SubtitleLine], str, str]:
         """Extract content from bilingual VTT file.
