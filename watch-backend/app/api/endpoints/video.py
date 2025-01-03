@@ -12,10 +12,7 @@ from app.api import deps
 from app.core.bilingual_subtitle_creator import create_bilingual_vtt
 from app.core.logger import logger
 from app.core.subtitle_processor import SubtitleProcessor
-from app.core.video_subtitles_downloader import download_video_and_subtitles
-from app.core.video_subtitles_downloader import (
-    get_ytb_id
-)
+from app.core.video_subtitles_downloader import download_video_and_subtitles, get_ytb_id
 from app.models import User, Video
 from app.schemas.requests import VideoRequest
 from app.schemas.responses import VideoResponse
@@ -30,8 +27,8 @@ async def download_and_process_video_and_subtitles(
         current_user: User = Depends(deps.get_current_user),
 ):
     """Process video request with proper transaction management.
-    
-    Note: ytb_id is always called ytb_id in the database and in this code base. video_id is 
+
+    Note: ytb_id is always called ytb_id in the database and in this code base. video_id is
     called id in the database.
     """
     url = new_video.video_url
@@ -45,10 +42,14 @@ async def download_and_process_video_and_subtitles(
 
             if existing_video:
                 # Ensure bilingual subtitles exist
-                await _ensure_bilingual_subtitles(existing_video, static_folder, session)
+                await _ensure_bilingual_subtitles(
+                    existing_video, static_folder, session
+                )
 
                 # Check if current user has watched this video
-                if not await _has_current_user_watched_video(current_user.id, existing_video.id, session):
+                if not await _has_current_user_watched_video(
+                        current_user.id, existing_video.id, session
+                ):
                     await _process_existed_video_for_new_user(
                         current_user, existing_video.id, session
                     )
@@ -63,8 +64,7 @@ async def download_and_process_video_and_subtitles(
     except Exception as e:
         await session.rollback()
         raise HTTPException(
-            status_code=500,
-            detail=f"Failed to process video request: {str(e)}"
+            status_code=500, detail=f"Failed to process video request: {str(e)}"
         )
 
 
@@ -75,9 +75,7 @@ async def _get_existing_video(ytb_id: str, session: AsyncSession) -> Optional[Vi
 
 
 async def _ensure_bilingual_subtitles(
-        video: Video,
-        static_folder: str,
-        session: AsyncSession
+        video: Video, static_folder: str, session: AsyncSession
 ):
     """Ensure bilingual subtitles exist for the video."""
     bilingual_vtt_path = f"{static_folder}/{video.ytb_id}/{video.ytb_id}_bilingual.vtt"
@@ -85,13 +83,12 @@ async def _ensure_bilingual_subtitles(
         video.vtt_path = create_bilingual_vtt(video.ytb_id, static_folder)
         session.add(video)
         logger.info(
-            f"Bilingual subtitles created for video {video.ytb_id}. Check why the bilingual subtitle isnot created.")
+            f"Bilingual subtitles created for video {video.ytb_id}. Check why the bilingual subtitle isnot created."
+        )
 
 
 async def _has_current_user_watched_video(
-        user_id: int,
-        video_id: int,
-        session: AsyncSession
+        user_id: int, video_id: int, session: AsyncSession
 ) -> bool:
     """Check if the given user has already watched the video using User table."""
     stmt = select(User.video_ids).where(User.id == user_id)
@@ -101,9 +98,7 @@ async def _has_current_user_watched_video(
 
 
 async def _process_existed_video_for_new_user(
-        user: User,
-        video_id: int,
-        session: AsyncSession
+        user: User, video_id: int, session: AsyncSession
 ):
     """Process existed video for user who hasn't watched it before."""
     # Fetch word IDs from Video
@@ -125,11 +120,7 @@ async def _process_existed_video_for_new_user(
 
 
 async def _process_new_video(
-        url: str,
-        ytb_id: str,
-        static_folder: str,
-        user: User,
-        session: AsyncSession
+        url: str, ytb_id: str, static_folder: str, user: User, session: AsyncSession
 ) -> Video:
     """Download and process new video."""
     try:
@@ -151,17 +142,14 @@ async def _process_new_video(
         # Process subtitles for all tables for new videos
         subtitle_processor = SubtitleProcessor()
         await subtitle_processor.process_subtitles(
-            video_id=new_video.id,
-            user_uuid=user.uuid,
-            session=session
+            video_id=new_video.id, user_uuid=user.uuid, session=session
         )
 
         return new_video
 
     except Exception as e:
         raise HTTPException(
-            status_code=500,
-            detail=f"Failed to process new video: {str(e)}"
+            status_code=500, detail=f"Failed to process new video: {str(e)}"
         )
 
 
