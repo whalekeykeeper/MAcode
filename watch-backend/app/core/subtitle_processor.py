@@ -63,8 +63,7 @@ class SubtitleProcessor:
         await session.flush()
 
         # Create lines (word_ids are empty for now) and return a mapping.
-
-        lines_dict = await self._create_line_entries_without_wordids(subtitle_lines, video.id, session)
+        lines_dict = await self._create_line_entries(subtitle_lines, video.id, session)
 
         # Create sentence entries (all fields updated)
         lines_zh = lines_dict['zh']
@@ -173,7 +172,7 @@ class SubtitleProcessor:
             raise
 
     @staticmethod
-    async def _create_line_entries_without_wordids(
+    async def _create_line_entries(
             sub_lines: List[SubtitleLine],
             video_id: int,
             session: AsyncSession
@@ -191,7 +190,6 @@ class SubtitleProcessor:
                     video_id=video_id,
                     language="zh",
                     line_text=line.zh_text,
-                    word_ids=[]
                 )
                 session.add(zh_line)
                 line_objects.append(("zh", zh_line))
@@ -201,20 +199,19 @@ class SubtitleProcessor:
                     video_id=video_id,
                     language="en",
                     line_text=line.en_text,
-                    word_ids=[]
                 )
                 session.add(en_line)
                 line_objects.append(("en", en_line))
 
         # Flush to get all IDs
-        await session.flush()
+        await session.flush()  # After this line, each line_obj in line_objects has its id populated
 
         # Now create the mappings with the guaranteed IDs
         for language, line_obj in line_objects:
             if language == "zh":
-                lines_zh[line_obj.id] = line_obj.line_text
+                lines_zh[line_obj.id] = line_obj.line_text  # Here we can access line_obj.id
             else:
-                lines_en[line_obj.id] = line_obj.line_text
+                lines_en[line_obj.id] = line_obj.line_text  # Here we can access line_obj.id
 
         lines['zh'] = lines_zh
         lines['en'] = lines_en
@@ -317,9 +314,6 @@ class SubtitleProcessor:
                         word=token.text,
                         lemma=token.lemma_,
                         pos=token.pos_,
-                        translation=None,
-                        complexity=None,
-                        cefr=None,
                     )
                     session.add(word)
                     words_in_sentence.append(word)
@@ -368,7 +362,7 @@ class SubtitleProcessor:
                                 sentence_data.sentence_id,
                                 word.id
                             ))
-                            
+
                             # Move position past this word and remove it from remaining
                             current_pos = pos + len(word_text)
                             remaining_words.pop(0)
@@ -410,9 +404,6 @@ class SubtitleProcessor:
             word=clean_text,
             lemma=token.lemma_,
             pos=token.pos_,
-            translation=None,
-            complexity=None,
-            cefr=None,
         )
         session.add(word)
         await session.flush()
