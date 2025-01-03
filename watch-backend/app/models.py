@@ -17,8 +17,17 @@
 from datetime import datetime
 from uuid import uuid4
 
-from sqlalchemy import JSON, Boolean, Float, ForeignKey, Index, Integer, String, DateTime
-from sqlalchemy import func
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    DateTime,
+    Float,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    func,
+)
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -78,6 +87,7 @@ class Line(Base):
     """
     Collect each line from subtitles.
     """
+
     __tablename__ = "line_model"
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     video_id: Mapped[int] = mapped_column(ForeignKey("video_model.id"), nullable=False)
@@ -144,10 +154,8 @@ class Word(Base):
     # complexity is calculated based on the frequency of the word in the subtlexus.csv
     complexity: Mapped[float] = mapped_column(Float, nullable=True)
 
-    __table_args__ = (
-        Index('idx_word_language_word', 'language', 'word'),
-    )
-    
+    __table_args__ = (Index("idx_word_language_word", "language", "word"),)
+
 
 class ChosenWords(Base):
     """
@@ -165,10 +173,14 @@ class ChosenWords(Base):
 
     # marked_as_learned is used to mark the word as learned by the user in the frontend, only available for the user
     # in the wordlist page. It is user-specific.
-    marked_as_learned: Mapped[bool] = mapped_column(Boolean, nullable=True, default=False)
+    marked_as_learned: Mapped[bool] = mapped_column(
+        Boolean, nullable=True, default=False
+    )
 
     # record_time is the time when the word is chosen so that we can sort the words by time.
-    record_time: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=func.now)
+    record_time: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=func.now
+    )
 
 
 class Vocabulary(Base):

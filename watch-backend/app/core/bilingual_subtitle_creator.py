@@ -60,28 +60,30 @@ def merge_subtitles(path1: str, path2: str, video_id: str, static_folder: str) -
 
     for sub_en in sorted(subs_en.values(), key=lambda x: x.start):
         # Find the closest Chinese subtitle that hasn't been used
-        available_zh = [(abs(sub_en.start - zh.start), zh) 
-                       for zh in subs_zh.values() 
-                       if zh.index not in processed_zh_subs]
-        
+        available_zh = [
+            (abs(sub_en.start - zh.start), zh)
+            for zh in subs_zh.values()
+            if zh.index not in processed_zh_subs
+        ]
+
         if available_zh:
             _, nearest_zh = min(available_zh, key=lambda x: x[0])
             # Ensure clean content before merging
             zh_content = nearest_zh.content.strip()
             en_content = sub_en.content.strip()
-            
+
             # Verify contents are clean
             assert "§§§" not in zh_content, f"§§§ found in Chinese: {zh_content}"
             assert "§§§" not in en_content, f"§§§ found in English: {en_content}"
-            
+
             merged_content = f"{zh_content}§§§{en_content}"
-            
+
             # Create new subtitle with merged content
             merged_sub = srt.Subtitle(
                 index=len(merged_subs) + 1,
                 start=nearest_zh.start,
                 end=nearest_zh.end,
-                content=merged_content
+                content=merged_content,
             )
             merged_subs.append(merged_sub)
             processed_zh_subs.add(nearest_zh.index)

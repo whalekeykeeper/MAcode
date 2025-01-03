@@ -14,8 +14,7 @@ async def get_session() -> AsyncGenerator[AsyncSession, None]:
 
 
 async def get_current_user(
-        uuid: str = Query(...),
-        session: AsyncSession = Depends(get_session)
+    uuid: str = Query(...), session: AsyncSession = Depends(get_session)
 ) -> User:
     """Dependency to get current user from UUID query parameter."""
     stmt = select(User).where(User.uuid == uuid)
@@ -23,8 +22,7 @@ async def get_current_user(
 
     if not user:
         raise HTTPException(
-            status_code=400,
-            detail="Invalid user UUID. Please provide a valid UUID."
+            status_code=400, detail="Invalid user UUID. Please provide a valid UUID."
         )
 
     return user

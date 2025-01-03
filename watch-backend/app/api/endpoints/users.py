@@ -12,8 +12,8 @@ router = APIRouter()
 
 @router.post("/user", response_model=UserResponse, status_code=200)
 async def get_or_create_user(
-    user_request: UserRequest,
-    session: AsyncSession = Depends(deps.get_session),
+        user_request: UserRequest,
+        session: AsyncSession = Depends(deps.get_session),
 ):
     """
     Handle user requests with three possible scenarios:
@@ -45,4 +45,3 @@ async def get_or_create_user(
             status_code=400,
             detail="Provided UUID does not exist. Please check your setup.",
         )
-

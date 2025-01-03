@@ -31,11 +31,12 @@ target_metadata = Base.metadata
 
 def get_database_uri():
     """Get database URI from environment variables."""
-    from dotenv import load_dotenv
     import os
-    
+
+    from dotenv import load_dotenv
+
     load_dotenv()
-    
+
     return (
         f"postgresql+asyncpg://"
         f"{os.getenv('DEFAULT_DATABASE_USER')}:"
