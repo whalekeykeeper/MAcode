@@ -52,7 +52,10 @@ def analyze_text(
     nlp_en = spacy.load("en_core_web_lg")
     nlp_zh = spacy.load("zh_core_web_lg")
     nlp = nlp_zh if language == "zh" else nlp_en
-    doc = nlp("".join(lines_dict.values()))
+
+    # Different joining strategy for Chinese and English
+    joined_text = "".join(lines_dict.values()) if language == "zh" else " ".join(lines_dict.values())
+    doc = nlp(joined_text)
 
     sentence_collection = []
     token_collection = []
@@ -61,58 +64,58 @@ def analyze_text(
     line_ids = list(lines_dict.keys())
     lines = list(lines_dict.values())
 
-    all_text = "".join(lines)
+    # Create a mapping of positions to line IDs
+    position_to_line = {}
     current_pos = 0
 
-    # Map sentences to lines
-    for sentence_id, sent in enumerate(doc.sents, start=1):
-        sentence = sent.text
-        sentence_start = all_text.index(sentence, current_pos)
-        sentence_end = sentence_start + len(sentence)
-        current_pos = sentence_end
-
-        current_line_start = 0
-        sentence_lines = []
-
-        for i, line in enumerate(lines):
-            current_line_end = current_line_start + len(line)
-
-            # Check if this line overlaps with the sentence
-            if current_line_start < sentence_end and current_line_end > sentence_start:
-                sentence_lines.append(line_ids[i])  # Append the line ID
-
-            current_line_start = current_line_end
-
-        sentence_collection.append(
-            {"line_ids": sentence_lines, "sentence_text": sentence}
-        )
-
-    # Map tokens to lines
-    current_line_start = 0
     for i, line in enumerate(lines):
-        current_line_end = current_line_start + len(line)
-        line_id = line_ids[i]
+        line_length = len(line)
+        for pos in range(current_pos, current_pos + line_length):
+            position_to_line[pos] = line_ids[i]
+        current_pos += line_length
+        if language == "en" and i < len(lines) - 1:
+            # Account for the space we added between lines
+            current_pos += 1
 
-        # Find tokens within this line
-        for token in doc:
-            token_start = token.idx
-            token_end = token_start + len(token.text)
+    # Process sentences
+    for sent in doc.sents:
+        start_idx = sent.start_char
+        end_idx = sent.end_char
 
-            if (
-                    current_line_start <= token_start < current_line_end
-                    or current_line_start < token_end <= current_line_end
-                    or (token_start < current_line_start and token_end > current_line_end)
-            ):
-                token_collection.append(
-                    {
-                        "line_id": line_id,
-                        "text": token.text,
-                        "lemma": token.lemma_,
-                        "pos": token.pos_,
-                    }
-                )
+        # Find all unique line IDs that this sentence spans
+        sentence_line_ids = set()
+        for pos in range(start_idx, end_idx):
+            if pos < len(joined_text):  # Ensure we don't go past the end of text
+                line_id = position_to_line.get(pos)
+                if line_id is not None:
+                    sentence_line_ids.add(line_id)
 
-        current_line_start = current_line_end
+        sentence_collection.append({
+            "line_ids": sorted(list(sentence_line_ids)),
+            "sentence_text": sent.text.strip()
+        })
+
+    # Process tokens
+    for token in doc:
+        start_idx = token.idx
+        end_idx = start_idx + len(token.text)
+
+        # Find the line ID for this token
+        token_line_ids = set()
+        for pos in range(start_idx, end_idx):
+            if pos < len(joined_text):  # Ensure we don't go past the end of text
+                line_id = position_to_line.get(pos)
+                if line_id is not None:
+                    token_line_ids.add(line_id)
+
+        for line_id in token_line_ids:
+            token_collection.append({
+                "line_id": line_id,
+                "text": token.text,
+                "lemma": token.lemma_,
+                "pos": token.pos_,
+                "vector": token.vector.tolist() if token.has_vector else None
+            })
 
     return sentence_collection, token_collection
 
@@ -389,7 +392,8 @@ class SubtitleProcessor:
                 pos=token_data["pos"],
                 line_id=token_data["line_id"],
                 video_id=video_id,
-                cefr=cefr,  # Set the CEFR level
+                cefr=cefr,
+                vector=token_data.get("vector", None),
             )
             session.add(word)
         logger.info(f"Created {len(token_collection)} words for {language}.")
@@ -447,7 +451,7 @@ if __name__ == "__main__":
         async with async_session() as session:
             try:
                 # Setup test data
-                ytb_id = "wr6fQ4KpbRM"  # Replace with a valid YouTube ID
+                ytb_id = "wr6fQ4KpbRM_test"  # Replace with a valid YouTube ID
                 url = f"https://www.youtube.com/watch?v={ytb_id}"
 
                 # Get absolute paths

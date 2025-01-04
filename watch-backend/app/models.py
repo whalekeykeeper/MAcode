@@ -155,6 +155,7 @@ class Word(Base):
     # We will use NLP method to align words, but when this is not possible, we will send the word and the context to query with Gemini API.
     translation: Mapped[str] = mapped_column(String(50), nullable=True)
 
+    vector: Mapped[list] = mapped_column(JSON, nullable=True)
     # complexity is calculated based on the frequency of the word in the subtlexus.csv
     complexity: Mapped[float] = mapped_column(Float, nullable=True)
 
