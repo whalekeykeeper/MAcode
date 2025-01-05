@@ -154,7 +154,9 @@ class Word(Base):
     # complexity is calculated based on the frequency of the word in the subtlexus.csv
     complexity: Mapped[float] = mapped_column(Float, nullable=True)
 
-    __table_args__ = (Index("idx_word_language_word", "language", "word"),)
+    __table_args__ = (Index("idx_word_language_word", "language", "word"),
+                      Index("idx_word_id_word", "id", "word"),
+                      Index("idx_word_id_lemma_vector", "id", "lemma", "vector"),)
 
 
 class ChosenWords(Base):
@@ -195,11 +197,11 @@ class Vocabulary(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("user_model.id"), nullable=False, unique=True)
     # key is "lemma" + ";" + "pos.upper()", value is a list of [word.id, word.lemma].
+    # Each user has one vocabulary entry.
     vocabulary: Mapped[dict] = mapped_column(
         JSONB,
         nullable=False,
     )
-    family_id = mapped_column(Integer, nullable=True, unique=True)
 
 
 class Families(Base):
@@ -210,11 +212,18 @@ class Families(Base):
     __tablename__ = "families_model"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    # Each user has multiple node entries.
     user_id: Mapped[int] = mapped_column(
-        ForeignKey("user_model.id"), nullable=False, unique=True
+        ForeignKey("user_model.id"), nullable=False
     )
-    # key is lemma, value is a list of word_ids
-    families: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    # Each family is a dictionary with only one key which is a lemma, and the value is a list of word_ids.
+    family: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+
+    # Parameter to store the mastery score of this node.
+    mastery: Mapped[Float] = mapped_column(Float, nullable=False, default=0.5)
+
+    # A boolean paramter to control if this word should never be selected for constructing graph and exercises.
+    acquired: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
     __table_args__ = (Index("idx_families_user_id", "user_id"),)
 
