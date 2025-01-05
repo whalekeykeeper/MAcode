@@ -29,7 +29,7 @@ from sqlalchemy import (
     func,
 )
 from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
 class Base(DeclarativeBase):
@@ -48,12 +48,7 @@ class User(Base):
     )
     video_ids: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
     word_ids: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
-
-    vocabulary: Mapped["Vocabulary"] = relationship("Vocabulary", back_populates="user")
-    family: Mapped["Family"] = relationship(
-        "Family", back_populates="user", uselist=False
-    )
-    graph: Mapped["Graph"] = relationship("Graph", back_populates="user", uselist=False)
+    vocabulary_id: Mapped[int] = mapped_column(Integer, nullable=True)
 
 
 class Video(Base):
@@ -131,7 +126,7 @@ class Word(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
 
-    # languge should be either simplified Chinese or English.
+    # language should be either simplified Chinese or English.
     # We use "zh" for simplified Chinese and "en" for English.
     language: Mapped[str] = mapped_column(String(50), nullable=False)
 
@@ -190,49 +185,36 @@ class ChosenWords(Base):
 
 class Vocabulary(Base):
     """
-    Each user has a vocabulary list.
+       Each user has a vocabulary object.
+       It contains all the open class words that this user has encountered.
+       Except stop words.
     """
 
     __tablename__ = "vocabulary_model"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    user_id: Mapped[int] = mapped_column(
-        ForeignKey("user_model.id"), nullable=False, unique=True
+    user_id: Mapped[int] = mapped_column(ForeignKey("user_model.id"), nullable=False, unique=True)
+    # key is "lemma" + ";" + "pos.upper()", value is a list of [word.id, word.lemma].
+    vocabulary: Mapped[dict] = mapped_column(
+        JSONB,
+        nullable=False,
     )
-    word_ids: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
-
-    # key is unique word-pos pair
-    # value is ()
-    vocabulary_data: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
-
-    family_id: Mapped[int] = mapped_column(
-        ForeignKey("family_model.id"), nullable=True, unique=True
-    )
-
-    # Relationships
-    user = relationship("User", back_populates="vocabulary")
-    family = relationship("Family", back_populates="vocabulary", uselist=False)
+    family_id = mapped_column(Integer, nullable=True, unique=True)
 
 
-class Family(Base):
+class Families(Base):
     """
-    Each vocabulary list is used to construct a word family.
+    Each user has a families object
     """
 
-    __tablename__ = "family_model"
+    __tablename__ = "families_model"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     user_id: Mapped[int] = mapped_column(
         ForeignKey("user_model.id"), nullable=False, unique=True
     )
-    # key is unique word-pos pair
-    # value is the word_id/word object of the word in the family
-    family_data: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
-
-    # Relationships
-    vocabulary = relationship("Vocabulary", back_populates="family", uselist=False)
-    user = relationship("User", back_populates="family")
-    graph = relationship("Graph", back_populates="family", uselist=False)
+    # key is lemma, value is a list of word_ids
+    families: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
 
 
 class Graph(Base):
@@ -246,14 +228,10 @@ class Graph(Base):
     user_id: Mapped[int] = mapped_column(
         ForeignKey("user_model.id"), nullable=False, unique=True
     )
-    family_id: Mapped[int] = mapped_column(
-        ForeignKey("family_model.id"), nullable=True, unique=True
+    families_id: Mapped[int] = mapped_column(
+        ForeignKey("families_model.id"), nullable=True, unique=True
     )
     graph: Mapped[dict] = mapped_column(JSONB, nullable=True)
-
-    # Relationships
-    family = relationship("Family", back_populates="graph", uselist=False)
-    user = relationship("User", back_populates="graph")
 
 
 class GapFillingTable(Base):
