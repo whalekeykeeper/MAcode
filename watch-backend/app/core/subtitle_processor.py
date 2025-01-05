@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Union
 from uuid import uuid4
 
 import spacy
@@ -9,7 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.logger import logger
-from app.models import User, Video
+from app.models import User, Video, Vocabulary, Families
 from utils.cefr_level_detector import detect_cefrj_level
 
 
@@ -167,6 +167,18 @@ class SubtitleProcessor:
             video, user, full_zh_text, full_en_text, session
         )
 
+        if user.vocabulary_id is None:
+
+            vocabulary_dict = await self._initiate_vocabulary(user.id, session)
+            logger.info(
+                f"Created vocabulary for user {user.id}, the length of the vocabulary is {len(vocabulary_dict)}")
+
+            families_dict = await self._initiate_family(user.id, vocabulary_dict, session)
+            logger.info(f"Created families for user {user.id}, the length of the families is {len(families_dict)}")
+
+        else:
+            # Update Vocabulary, Family, and user.vocabulart_id
+            pass
         return video.vtt_path
 
     @staticmethod
@@ -180,6 +192,7 @@ class SubtitleProcessor:
         # Update full_zh_text and full_en_text for video
         video.zh_text = full_zh_text
         video.en_text = full_en_text
+
         # Update video_ids for user
         if user.video_ids is None:
             user.video_ids = []
@@ -190,6 +203,7 @@ class SubtitleProcessor:
         session.add(user)
         await session.flush()
         await session.commit()
+
         # Here update word_ids for video and user
         # Get all words for this video
         stmt = select(Word.id).where(Word.video_id == video.id)
@@ -201,15 +215,18 @@ class SubtitleProcessor:
         video.word_ids = list(
             set(video.word_ids + video_word_ids)
         )  # Ensure unique word IDs
+
         # Update user's word_ids
         if user.word_ids is None:
             user.word_ids = []
         user.word_ids = list(
             set(user.word_ids + video_word_ids)
         )  # Ensure unique word IDs
+
         logger.info(f"Added {len(video_word_ids)} words to video and user")
         logger.info(f"Video now has {len(video.word_ids)} total words")
         logger.info(f"User now has {len(user.word_ids)} total words")
+
         # Final commit for all changes
         session.add(video)
         session.add(user)
@@ -400,14 +417,83 @@ class SubtitleProcessor:
         # Final flush to save all Word and WordContext entries
         await session.flush()
 
-    @staticmethod
-    def _is_valid_word_token(token: Token) -> bool:
-        """Determine if a token should be processed as a word."""
-        return (
-                not token.is_punct
-                and not token.is_space  # Skip punctuation
-                and not token.like_num  # Skip whitespace  # Skip pure numbers
+    async def _initiate_vocabulary(self, user_id: int, session: AsyncSession) -> Dict[str, List[List[Union[int, str]]]]:
+        """Select user as current user and return word_ids."""
+        # Select all “en” words for the user for later learning purpose
+        stmt = select(User).where(User.id == user_id)
+        user = (await session.execute(stmt)).scalar_one()
+
+        # Using word_ids to retrieve all words
+        stmt = select(Word).where(Word.id.in_(user.word_ids))
+        words = (await session.execute(stmt)).scalars().all()
+
+        # Filter words: remove stop words and keep only certain POS
+        valid_pos = ["NOUN", "VERB", "ADJ", "ADV", "PROPN", "INTJ"]
+        filtered_words = [
+            word for word in words
+            if ((word.language == "en" and not self.nlp_en.vocab[word.word].is_stop
+                 and word.pos in valid_pos))
+        ]
+
+        # Create dictionary with lemma+pos as key, a list of (id, lemma) as value
+        vocabulary_dict: Dict[str, List[List[Union[int, str]]]] = {}
+        for word in filtered_words:
+            key = f"{word.lemma};{word.pos}"
+            if key not in vocabulary_dict:
+                vocabulary_dict[key] = []
+            vocabulary_dict[key].append([word.id, word.lemma])
+
+        # If any value in words has more than 5 words, logger it
+        for key, value in vocabulary_dict.items():
+            if len(value) > 5:
+                logger.info(f"Family {key} has {len(value)} words.")
+
+        # Create vocabulary entry and update User table
+        vocabulary_entry = Vocabulary(
+            user_id=user_id,
+            vocabulary=vocabulary_dict
         )
+        session.add(vocabulary_entry)
+        await session.flush()
+
+        # Update User table
+        user.vocabulary_id = vocabulary_entry.id
+        session.add(user)
+        await session.flush()
+        await session.commit()
+
+        return vocabulary_dict
+
+    @staticmethod
+    async def _initiate_family(
+            user_id: int,
+            vocabulary_dict: Dict[str, List[List[Union[int, str]]]],
+            session: AsyncSession) -> Dict[str, List[int]]:
+        # Create dictionary with lemma as key
+        families = {}
+        for ele in vocabulary_dict.values():
+            for id_lemma_list in ele:  # id_lemma_list = [word_id_list, word_lemma]
+                word_id = id_lemma_list[0]
+                word_lemma = id_lemma_list[1]
+                if word_lemma not in families:
+                    families[word_lemma] = []
+                families[word_lemma].append(word_id)
+
+        # Create family entry and update User table
+        family_entry = Families(
+            user_id=user_id,
+            families=families,
+        )
+        session.add(family_entry)
+        await session.flush()
+
+        stmt = select(Vocabulary).where(Vocabulary.user_id == user_id)
+        vocabulary = (await session.execute(stmt)).scalar_one()
+        vocabulary.family_id = family_entry.id
+        await session.flush()
+        await session.commit()
+
+        return families
 
 
 if __name__ == "__main__":
@@ -451,7 +537,7 @@ if __name__ == "__main__":
         async with async_session() as session:
             try:
                 # Setup test data
-                ytb_id = "wr6fQ4KpbRM_test"  # Replace with a valid YouTube ID
+                ytb_id = "wr6fQ4KpbRM"  # Replace with a valid YouTube ID
                 url = f"https://www.youtube.com/watch?v={ytb_id}"
 
                 # Get absolute paths
@@ -506,27 +592,27 @@ if __name__ == "__main__":
                 # Commit all changes
                 await session.commit()
 
-                # Print final statistics with top 10 examples
+                # Print final statistics with top 3 examples
                 print("\nFinal Database Statistics:")
 
-                # Top 10 Words
+                # Top 3 Words
                 words = (
                     (
                         await session.execute(
-                            select(Word).order_by(Word.id.asc()).limit(10)
+                            select(Word).order_by(Word.id.asc()).limit(3)
                         )
                     )
                     .scalars()
                     .all()
                 )
-                print(f"\nTop 10 Words:")
+                print(f"\nTop 3 Words:")
                 for word in words:
                     print(
                         f"ID: {word.id}, Language: {word.language}, Word: {word.word}, POS: {word.pos}, "
                         f"Lemma: {word.lemma}, Line ID: {word.line_id}, Video ID: {word.video_id}"
                     )
 
-                # Top 10 Lines
+                # Top 3 Lines
                 lines = (
                     (
                         await session.execute(
@@ -536,34 +622,34 @@ if __name__ == "__main__":
                     .scalars()
                     .all()
                 )
-                print(f"\nTop 10 Lines:")
+                print(f"\nTop 3 Lines:")
                 for line in lines:
                     print(
                         f"ID: {line.id}, Language: {line.language}, Line Text: {line.line_text}"
                     )
 
-                # Top 10 Sentences
+                # Top 3 Sentences
                 sentences = (
                     (
                         await session.execute(
-                            select(Sentence).order_by(Sentence.id.asc()).limit(10)
+                            select(Sentence).order_by(Sentence.id.asc()).limit(3)
                         )
                     )
                     .scalars()
                     .all()
                 )
-                print(f"\nTop 10 Sentences:")
+                print(f"\nTop 3 Sentences:")
                 for sentence in sentences:
                     print(
-                        f"ID: {sentence.id}, Language: {sentence.language}, Sentence Text: "
-                        f"{sentence.sentence_text}, Line IDs: {sentence.line_ids}"
+                        f"ID: {sentence.id}, Language: {sentence.language}, Sentence Text length: "
+                        f"{len(sentence.sentence_text)}, Line IDs: {sentence.line_ids}"
                     )
 
-                # Top 10 Users
+                # Top 3 Users
                 users = (
                     (
                         await session.execute(
-                            select(User).order_by(User.id.asc()).limit(10)
+                            select(User).order_by(User.id.asc()).limit(3)
                         )
                     )
                     .scalars()
@@ -572,25 +658,41 @@ if __name__ == "__main__":
                 print(f"\nTop 10 Users:")
                 for user in users:
                     print(
-                        f"ID: {user.id}, UUID: {user.uuid}, Video IDs: {user.video_ids}, Word IDs: {user.word_ids}"
+                        f"ID: {user.id}, UUID: {user.uuid}, Video IDs: {user.video_ids}, amount of Word IDs: "
+                        f"{len(user.word_ids)}"
                     )
 
-                # Top 10 Videos
+                # Top 3 Videos
                 videos = (
                     (
                         await session.execute(
-                            select(Video).order_by(Video.id.asc()).limit(10)
+                            select(Video).order_by(Video.id.asc()).limit(3)
                         )
                     )
                     .scalars()
                     .all()
                 )
-                print(f"\nTop 10 Videos:")
+                print(f"\nTop 3 Videos:")
                 for video in videos:
                     print(
                         f"ID: {video.id}, YouTube ID: {video.ytb_id}, URL: {video.url}, Video Path: "
-                        f"{video.video_path}, VTT Path: {video.vtt_path}, Word IDs: {video.word_ids}",
-                        f"ZH Text: {video.zh_text}, EN Text: {video.en_text}",
+                        f"{video.video_path}, VTT Path: {video.vtt_path}, Amount of Word IDs: {len(video.word_ids)}",
+                        f"length of ZH Text: {len(video.zh_text)}, length of EN Text: {len(video.en_text)}",
+                    )
+                # User's vocabulary, there should only be one vocabulary for this current user (one vocabulary per user)
+                vocabulary = (
+                    (
+                        await session.execute(
+                            select(Vocabulary).where(Vocabulary.user_id == user1.id)
+                        )
+                    )
+                    .scalars()
+                    .all()
+                )
+                print(f"\nVocabulary:")
+                for v in vocabulary:
+                    print(
+                        f"ID: {v.id}, User ID: {v.user_id}, length of Vocabulary: {len(v.vocabulary)}",
                     )
 
                 print("\nTest completed successfully!")
