@@ -129,6 +129,7 @@ class SubtitleProcessor:
             self,
             ytb_id: str,
             user_uuid: str,
+            valid_pos: List[str],
             session: AsyncSession,
     ) -> str:
         """Parsing bilingual subtitle for a new video and update database."""
@@ -169,7 +170,7 @@ class SubtitleProcessor:
 
         if user.vocabulary_id is None:
 
-            vocabulary_dict = await self._initiate_vocabulary(user.id, session)
+            vocabulary_dict = await self._initiate_vocabulary(user.id, valid_pos, session)
             logger.info(
                 f"Created vocabulary for user {user.id}, the length of the vocabulary is {len(vocabulary_dict)}")
 
@@ -177,7 +178,6 @@ class SubtitleProcessor:
             logger.info(f"Created families for user {user.id}, the length of the families is {len(families_dict)}")
 
         else:
-            # Update Vocabulary, Family, and user.vocabulart_id
             pass
         return video.vtt_path
 
@@ -417,7 +417,8 @@ class SubtitleProcessor:
         # Final flush to save all Word and WordContext entries
         await session.flush()
 
-    async def _initiate_vocabulary(self, user_id: int, session: AsyncSession) -> Dict[str, List[List[Union[int, str]]]]:
+    async def _initiate_vocabulary(self, user_id: int, valid_pos: List[str], session: AsyncSession) -> Dict[str,
+    List[List[Union[int, str]]]]:
         """Select user as current user and return word_ids."""
         # Select all “en” words for the user for later learning purpose
         stmt = select(User).where(User.id == user_id)
@@ -428,7 +429,6 @@ class SubtitleProcessor:
         words = (await session.execute(stmt)).scalars().all()
 
         # Filter words: remove stop words and keep only certain POS
-        valid_pos = ["NOUN", "VERB", "ADJ", "ADV", "PROPN", "INTJ"]
         filtered_words = [
             word for word in words
             if ((word.language == "en" and not self.nlp_en.vocab[word.word].is_stop
@@ -469,7 +469,7 @@ class SubtitleProcessor:
             user_id: int,
             vocabulary_dict: Dict[str, List[List[Union[int, str]]]],
             session: AsyncSession) -> Dict[str, List[int]]:
-        # Create dictionary with lemma as key
+        # Create Nodes. Each node is a dictionary with lemma as key, a list of word_ids as value. Each node is a family, i.e, an entry in the family table.
         families = {}
         for ele in vocabulary_dict.values():
             for id_lemma_list in ele:  # id_lemma_list = [word_id_list, word_lemma]
@@ -479,17 +479,15 @@ class SubtitleProcessor:
                     families[word_lemma] = []
                 families[word_lemma].append(word_id)
 
-        # Create family entry and update User table
-        family_entry = Families(
-            user_id=user_id,
-            families=families,
-        )
-        session.add(family_entry)
-        await session.flush()
-
-        stmt = select(Vocabulary).where(Vocabulary.user_id == user_id)
-        vocabulary = (await session.execute(stmt)).scalar_one()
-        vocabulary.family_id = family_entry.id
+        # Update the family table with multiple family
+        for key, value in families.items():
+            family_entry = Families(
+                user_id=user_id,
+                family={key: value},
+                mastery=0.5,
+                acquired=False,
+            )
+            session.add(family_entry)
         await session.flush()
         await session.commit()
 
@@ -585,7 +583,8 @@ if __name__ == "__main__":
 
                 # Process subtitles for the first user and video
                 vtt_processed_path = await processor.process_subtitles(
-                    ytb_id=ytb_id, user_uuid=user1.uuid, session=session
+                    ytb_id=ytb_id, user_uuid=user1.uuid, valid_pos=["NOUN", "VERB", "ADJ", "ADV", "PROPN", "INTJ"],
+                    session=session
                 )
                 print(f"Processed subtitles for video: {vtt_processed_path}")
 
@@ -655,7 +654,7 @@ if __name__ == "__main__":
                     .scalars()
                     .all()
                 )
-                print(f"\nTop 10 Users:")
+                print(f"\nTop 3 Users:")
                 for user in users:
                     print(
                         f"ID: {user.id}, UUID: {user.uuid}, Video IDs: {user.video_ids}, amount of Word IDs: "
@@ -693,6 +692,22 @@ if __name__ == "__main__":
                 for v in vocabulary:
                     print(
                         f"ID: {v.id}, User ID: {v.user_id}, length of Vocabulary: {len(v.vocabulary)}",
+                    )
+
+                # Top 3 Families
+                families = (
+                    (
+                        await session.execute(
+                            select(Families).order_by(Families.id.asc()).limit(3)
+                        )
+                    )
+                    .scalars()
+                    .all()
+                )
+                print(f"\nTop 3 Families:")
+                for family in families:
+                    print(
+                        f"ID: {family.id}, User ID: {family.user_id}, Family: {family.family}, Mastery: {family.mastery}, Acquired: {family.acquired}",
                     )
 
                 print("\nTest completed successfully!")
