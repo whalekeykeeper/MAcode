@@ -147,7 +147,7 @@ class Word(Base):
     video_id: Mapped[int] = mapped_column(ForeignKey("video_model.id"), nullable=False)
 
     # translation is expected to be extracted from subtitle in the other language in the bilingual subtitle.
-    # We will use NLP method to align words, but when this is not possible, we will send the word and the context to query with Gemini API.
+    # We could use mBERT to align words, but it is taking too much memory, for now, we will send the word and the context to query with Gemini API.
     translation: Mapped[str] = mapped_column(String(50), nullable=True)
 
     vector: Mapped[list] = mapped_column(JSON, nullable=True)
@@ -215,6 +215,8 @@ class Families(Base):
     )
     # key is lemma, value is a list of word_ids
     families: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+
+    __table_args__ = (Index("idx_families_user_id", "user_id"),)
 
 
 class Graph(Base):
