@@ -214,35 +214,57 @@ class Families(Base):
     user_id: Mapped[int] = mapped_column(
         ForeignKey("user_model.id"), nullable=False
     )
-
     lemma: Mapped[str] = mapped_column(String(50), nullable=False)
-
     word_ids: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
-
-    # Parameter to store the mastery score of this node.
-    mastery: Mapped[Float] = mapped_column(Float, nullable=False, default=0.5)
-
-    # A boolean parameter to control if this word should never be selected for constructing graph and exercises.
-    acquired: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
     __table_args__ = (Index("idx_families_user_id", "user_id"),)
 
 
+# class Graph(Base):
+#     """
+#     Each user has a graph object.
+#     """
+#
+#     __tablename__ = "graph_model"
+#
+#     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+#     user_id: Mapped[int] = mapped_column(
+#         ForeignKey("user_model.id"), nullable=False, unique=True
+#     )
+#     families_id: Mapped[int] = mapped_column(
+#         ForeignKey("families_model.id"), nullable=True, unique=True
+#     )
+#     graph: Mapped[dict] = mapped_column(JSONB, nullable=True)
+#
+
+
 class Graph(Base):
     """
-    Each user has a graph object.
-    """
-
+     Each user has a graph object.
+     """
     __tablename__ = "graph_model"
-
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    user_id: Mapped[int] = mapped_column(
-        ForeignKey("user_model.id"), nullable=False, unique=True
-    )
-    families_id: Mapped[int] = mapped_column(
-        ForeignKey("families_model.id"), nullable=True, unique=True
-    )
-    graph: Mapped[dict] = mapped_column(JSONB, nullable=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("user_model.id"), nullable=False, unique=True)
+    last_updated: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=func.now())
+
+
+class GraphNode(Base):
+    __tablename__ = "graph_node"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    graph_id: Mapped[int] = mapped_column(ForeignKey("graph_model.id"), nullable=False)
+    lemma: Mapped[str] = mapped_column(String(50), nullable=False)
+    mastery: Mapped[float] = mapped_column(Float, nullable=False, default=0.5)
+    word_ids: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    acquired: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+
+
+class GraphEdge(Base):
+    __tablename__ = "graph_edge"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    graph_id: Mapped[int] = mapped_column(ForeignKey("graph_model.id"), nullable=False)
+    node1_id: Mapped[int] = mapped_column(ForeignKey("graph_node.id"), nullable=False)
+    node2_id: Mapped[int] = mapped_column(ForeignKey("graph_node.id"), nullable=False)
+    weight: Mapped[float] = mapped_column(Float, nullable=False)
 
 
 class GapFillingTable(Base):
