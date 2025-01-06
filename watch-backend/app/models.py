@@ -214,10 +214,10 @@ class Families(Base):
     user_id: Mapped[int] = mapped_column(
         ForeignKey("user_model.id"), nullable=False
     )
-    # Each family is a dictionary with only one key which is a lemma, and the value is a list of word_ids.
-    family: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
 
-    family_vector: Mapped[list] = mapped_column(JSON, nullable=True)
+    lemma: Mapped[str] = mapped_column(String(50), nullable=False)
+
+    word_ids: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
 
     # Parameter to store the mastery score of this node.
     mastery: Mapped[Float] = mapped_column(Float, nullable=False, default=0.5)
