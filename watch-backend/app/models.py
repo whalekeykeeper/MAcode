@@ -154,9 +154,7 @@ class Word(Base):
     # complexity is calculated based on the frequency of the word in the subtlexus.csv
     complexity: Mapped[float] = mapped_column(Float, nullable=True)
 
-    __table_args__ = (Index("idx_word_language_word", "language", "word"),
-                      Index("idx_word_id_word", "id", "word"),
-                      Index("idx_word_id_lemma_vector", "id", "lemma", "vector"),)
+    __table_args__ = (Index("idx_word_language_word", "language", "word"),)
 
 
 class ChosenWords(Base):
@@ -219,10 +217,12 @@ class Families(Base):
     # Each family is a dictionary with only one key which is a lemma, and the value is a list of word_ids.
     family: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
 
+    family_vector: Mapped[list] = mapped_column(JSON, nullable=True)
+
     # Parameter to store the mastery score of this node.
     mastery: Mapped[Float] = mapped_column(Float, nullable=False, default=0.5)
 
-    # A boolean paramter to control if this word should never be selected for constructing graph and exercises.
+    # A boolean parameter to control if this word should never be selected for constructing graph and exercises.
     acquired: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
     __table_args__ = (Index("idx_families_user_id", "user_id"),)
