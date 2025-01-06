@@ -1,11 +1,7 @@
-import itertools
-from collections import defaultdict
 from dataclasses import dataclass
-from typing import List, Dict, Tuple, Union, Optional
+from typing import List, Dict, Tuple, Optional
 from uuid import uuid4
 
-import networkx as nx
-import numpy as np
 import spacy
 import webvtt
 from spacy.tokens import Token
@@ -13,8 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.logger import logger
-from app.models import Graph, Families
-from app.models import User, Video, Vocabulary
+from app.models import User, Video
 from utils.cefr_level_detector import detect_cefrj_level
 
 
@@ -172,23 +167,10 @@ class SubtitleProcessor:
             video, user, full_zh_text, full_en_text, session
         )
 
-        if user.vocabulary_id is None:
+        stats = await self.stats_for_subtitles(session, user.id)
+        for key, value in stats.items():
+            print(f"{key}: {value}")
 
-            vocabulary_dict = await self._initiate_vocabulary(user.id, valid_pos, session)
-            logger.info(
-                f"Created vocabulary for user {user.id}, the length of the vocabulary is {len(vocabulary_dict)}")
-
-            families_dict = await self._initiate_family(user.id, vocabulary_dict, session)
-            logger.info(f"Created families for user {user.id}, the length of the families is {len(families_dict)}")
-
-            # Build the graph
-            await self._initiate_graph(user.id, session, similarity_threshold)
-            stats = await self.stats_for_subtitles(session, user.id)
-            for key, value in stats.items():
-                print(f"{key}: {value}")
-
-        else:
-            pass
         return video.vtt_path
 
     @staticmethod
@@ -434,216 +416,6 @@ class SubtitleProcessor:
         await session.flush()
         await session.commit()
 
-    async def _initiate_vocabulary(self, user_id: int, valid_pos: List[str], session: AsyncSession) \
-            -> Dict[str, List[List[Union[int, str]]]]:
-        """If the user has no vocabulary, create one."""
-        # First, check if the current user has a vocabulary
-        stmt = select(Vocabulary).where(Vocabulary.user_id == user_id)
-        vocabulary = (await session.execute(stmt)).scalar_one_or_none()
-        if vocabulary:
-            logger.info(f"User {user_id} already has a vocabulary.")
-            return vocabulary.vocabulary
-
-        # Select all “en” words for the user for later learning purpose
-        stmt = select(User).where(User.id == user_id)
-        user = (await session.execute(stmt)).scalar_one()
-
-        # Using word_ids to retrieve all words
-        stmt = select(Word).where(Word.id.in_(user.word_ids))
-        words = (await session.execute(stmt)).scalars().all()
-
-        # Filter words: remove stop words and keep only certain POS
-        filtered_words = [
-            word for word in words
-            if ((word.language == "en" and not self.nlp_en.vocab[word.lemma].is_stop
-                 and word.pos in valid_pos))
-        ]
-
-        # Create dictionary with lemma+pos as key, a list of (id, lemma) as value
-        vocabulary_dict: Dict[str, List[List[Union[int, str]]]] = {}
-        for word in filtered_words:
-            key = f"{word.lemma};{word.pos}"
-            if key not in vocabulary_dict:
-                vocabulary_dict[key] = []
-            vocabulary_dict[key].append([word.id, word.lemma])
-
-        self.new_video_stats["en"]["new_lemma_pos_pairs"] = len(vocabulary_dict)
-
-        # If any value in words has more than 5 words, logger it
-        lemma_pos_pairs_has_more_than_5_occurrences = 0
-        for key, value in vocabulary_dict.items():
-            if len(value) > 5:
-                logger.info(f"Family {key} has {len(value)} words.")
-                lemma_pos_pairs_has_more_than_5_occurrences += 1
-        self.new_video_stats["en"][
-            "lemma_pos_pairs_has_more_than_5_occurrences"] = lemma_pos_pairs_has_more_than_5_occurrences
-
-        # Create vocabulary entry and update User table
-        vocabulary_entry = Vocabulary(
-            user_id=user_id,
-            vocabulary=vocabulary_dict
-        )
-        session.add(vocabulary_entry)
-        await session.flush()
-
-        # Update User table
-        user.vocabulary_id = vocabulary_entry.id
-        session.add(user)
-        await session.flush()
-        await session.commit()
-
-        return vocabulary_dict
-
-    async def _initiate_family(self,
-                               user_id: int,
-                               vocabulary_dict: Dict[str, List[List[Union[int, str]]]],
-                               session: AsyncSession) -> Dict[str, List[int]]:
-        # Create Nodes. Each node is a dictionary with lemma as key, a list of word_ids as value. Each node is a family, i.e, an entry in the family table.
-        families = {}
-        for ele in vocabulary_dict.values():
-            for id_lemma_list in ele:  # id_lemma_list = [word_id_list, word_lemma]
-                word_id = id_lemma_list[0]
-                word_lemma = id_lemma_list[1]
-                if word_lemma not in families:
-                    families[word_lemma] = []
-                families[word_lemma].append(word_id)
-
-        # Update the family table with multiple family
-        for key, value in families.items():
-            family_entry = Families(
-                user_id=user_id,
-                lemma=key,
-                word_ids=value,
-            )
-            session.add(family_entry)
-        self.new_video_stats["en"]["new_families"] = len(families)
-        await session.flush()
-        await session.commit()
-
-        return families
-
-    @staticmethod
-    async def _initiate_graph(user_id: int, session: AsyncSession,
-                              similarity_threshold: float = 0.3) -> None:
-
-        """
-        Build a graph connecting families based on vector similarity.
-        similarity_threshold has a default value of 0.30.
-        If don't want to use this minimal similarity threshold, use  0.0.
-        Args:
-            user_id: The ID of the current user.
-            session: The database session.
-            similarity_threshold: Minimum similarity to create an edge.
-
-        Returns:
-            None: The graph is stored in the database.
-        """
-        # Retrieve all families for the user
-        logger.info(f"Building graph for user {user_id} with similarity_threshold {similarity_threshold}...")
-        stmt = select(Families).where(Families.user_id == user_id)
-        families = (await session.execute(stmt)).scalars().all()
-
-        if not families:
-            logger.info(f"No families found for user {user_id}.")
-            return
-
-        if similarity_threshold == 0.0:
-            # Flatten vectors and map them to families
-            relation = defaultdict(list)
-            vectors = []
-            for family in families:
-                for word_id in family.word_ids:
-                    result = await session.execute(select(Word).where(Word.id == word_id))
-                    word = result.scalar_one()
-                    relation[family.lemma].append(len(vectors))
-                    vectors.append(word.vector)
-            vectors = np.array(vectors)
-        else:
-            vectors = []
-            for family in families:
-                word_vectors = []
-                for word_id in family.word_ids:
-                    result = await session.execute(select(Word).where(Word.id == word_id))
-                    word = result.scalar_one()
-                    word_vectors.append(word.vector)
-                # Compute the mean of the word vectors for the family
-                vectors.append(np.mean(word_vectors, axis=0))
-            vectors = np.array(vectors)
-
-        # Normalize vectors and compute similarity matrix
-        norms = np.linalg.norm(vectors, axis=1)
-        normalized_vectors = vectors / norms[:, np.newaxis]
-        similarity_matrix = np.dot(normalized_vectors, normalized_vectors.T)
-
-        # Build adjacency list with degree restriction (max 5 edges per family)
-        weighted_adj_list = []
-        degree = defaultdict(int)  # Track the degree of each node
-
-        if similarity_threshold == 0.0:
-            family_names = [family.lemma for family in families]
-            relatives = {}
-
-            for i, f1 in enumerate(family_names):
-                buffer = []
-                for f2 in family_names[i + 1:]:
-                    pairs = list(itertools.product(relation[f1], relation[f2]))
-                    score = max(similarity_matrix[x][y] for x, y in pairs)
-                    if score > 0.3:
-                        buffer.append((f1, f2, min(1.0, score)))
-                relatives[f1] = sorted(buffer, key=lambda x: -x[2])
-
-            # Restrict edges to max degree of 5
-            for f, edges in relatives.items():
-                for e in edges:
-                    if degree[e[0]] < 5 and degree[e[1]] < 5:
-                        weighted_adj_list.append(e)
-                        degree[e[0]] += 1
-                        degree[e[1]] += 1
-                    else:
-                        break
-        else:
-            families_list = [family.lemma for family in families]
-            for i, f1 in enumerate(families_list):
-                buffer = []
-                for j, f2 in enumerate(families_list[i + 1:]):
-                    j = i + j + 1  # Adjust index offset
-                    if similarity_matrix[i][j] > similarity_threshold:
-                        buffer.append((f1, f2, similarity_matrix[i][j]))
-                buffer = sorted(buffer, key=lambda x: -x[2])  # Sort edges by weight
-
-                # Add edges with degree restriction
-                for edge in buffer:
-                    if degree[edge[0]] < 5 and degree[edge[1]] < 5:
-                        weighted_adj_list.append(edge)
-                        degree[edge[0]] += 1
-                        degree[edge[1]] += 1
-                    else:
-                        break
-
-        # Build the graph using networkx
-        graph = nx.Graph()
-        graph.add_nodes_from([family.lemma for family in families])
-        graph.add_weighted_edges_from(weighted_adj_list)
-        nx.set_node_attributes(graph, 0.5, "mastery")
-
-        # Convert the graph to a serializable format
-        graph_data = nx.node_link_data(graph)
-
-        # Save the graph in the database
-        graph_entry = Graph(user_id=user_id)
-        session.add(graph_entry)
-        await session.flush()
-        await session.commit()
-
-        logger.info(f"Graph for user {user_id} built and stored in the database.")
-
-    # async def print_stats_for_new_video(self) -> None:
-    #     for key, value in self.new_video_stats.items():
-    #         print(f"---------\nFor language: {key}")
-    #         for k, v in value.items():
-    #             print(f"Count for {k} is {v}")
-    #         print()
-
     async def stats_for_subtitles(self, session: AsyncSession, user_id: int) -> dict:
         """
         Generate statistics about subtitles, words, and families for a user, differentiating between "en" and "zh".
@@ -700,33 +472,6 @@ class SubtitleProcessor:
 
         sorted_word_freq_en = sorted(word_freq_en.items(), key=lambda x: -x[1])
         stats["most_frequent_words_en"] = sorted_word_freq_en[:10]
-
-        # Count families (for English only)
-        stmt = select(Families).where(Families.user_id == user_id)
-        families = (await session.execute(stmt)).scalars().all()
-        stats["family_count_en"] = len(families)
-
-        # Average family size (for English only)
-        family_sizes_en = [len(family.word_ids) for family in families]
-        avg_family_size_en = sum(family_sizes_en) / len(family_sizes_en) if family_sizes_en else 0
-        stats["avg_family_size_en"] = avg_family_size_en
-
-        # # Mastery levels for families (for English only)
-        # mastery_levels_en = [family.mastery for family in families]
-        # avg_mastery_en = sum(mastery_levels_en) / len(mastery_levels_en) if mastery_levels_en else 0
-        # stats["avg_mastery_en"] = avg_mastery_en
-
-        # # Degree of families in the graph (for English only)
-        # stmt = select(Graph).where(Graph.user_id == user_id)
-        # graph = (await session.execute(stmt)).scalar_one_or_none()
-        # if graph and graph.graph:
-        #     import networkx as nx
-        #     network = nx.node_link_graph(graph.graph)
-        #     degrees = [d for node, d in network.degree if node in [family.lemma for family in families]]
-        #     max_degree_en = max(degrees) if degrees else 0
-        #     avg_degree_en = sum(degrees) / len(degrees) if degrees else 0
-        #     stats["max_degree_en"] = max_degree_en
-        #     stats["avg_degree_en"] = avg_degree_en
 
         return stats
 
@@ -914,38 +659,6 @@ if __name__ == "__main__":
                         f"ID: {video.id}, YouTube ID: {video.ytb_id}, URL: {video.url}, Video Path: "
                         f"{video.video_path}, VTT Path: {video.vtt_path}, Amount of Word IDs: {len(video.word_ids)}",
                         f"length of ZH Text: {len(video.zh_text)}, length of EN Text: {len(video.en_text)}",
-                    )
-                # User's vocabulary, there should only be one vocabulary for this current user (one vocabulary per user)
-                vocabulary = (
-                    (
-                        await session.execute(
-                            select(Vocabulary).where(Vocabulary.user_id == user1.id)
-                        )
-                    )
-                    .scalars()
-                    .all()
-                )
-                print(f"\nVocabulary:")
-                for v in vocabulary:
-                    print(
-                        f"ID: {v.id}, User ID: {v.user_id}, length of Vocabulary: {len(v.vocabulary)}",
-                    )
-
-                # Top 3 Families
-                families = (
-                    (
-                        await session.execute(
-                            select(Families).order_by(Families.id.asc()).limit(3)
-                        )
-                    )
-                    .scalars()
-                    .all()
-                )
-                print(f"\nTop 3 Families:")
-                for family in families:
-                    print(
-                        f"ID: {family.id}, User ID: {family.user_id}, Family lemma: {family.lemma}, "
-                        f"word_ids' length: {len(family.word_ids)}, ",
                     )
 
                 # Get all the words for current video when pos is in valid_pos, except word.lemma is stop word,
