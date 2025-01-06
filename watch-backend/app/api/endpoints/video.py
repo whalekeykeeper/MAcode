@@ -1,8 +1,10 @@
 # /app/api/endpoints/video.py
 
 from pathlib import Path
+from typing import List
 from typing import Optional
 
+import spacy
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,6 +16,7 @@ from app.core.logger import logger
 from app.core.subtitle_processor import SubtitleProcessor
 from app.core.video_subtitles_downloader import download_video_and_subtitles, get_ytb_id
 from app.models import User, Video
+from app.models import Word, Vocabulary
 from app.schemas.requests import VideoRequest
 from app.schemas.responses import VideoResponse
 
@@ -34,6 +37,7 @@ async def download_and_process_video_and_subtitles(
     url = new_video.video_url
     ytb_id = get_ytb_id(url)
     static_folder = "static"
+    valid_pos = ["NOUN", "VERB", "ADJ", "ADV", "PROPN", "INTJ"]
 
     try:
         async with session.begin():
@@ -41,23 +45,15 @@ async def download_and_process_video_and_subtitles(
             existing_video = await _get_existing_video(ytb_id, session)
 
             if existing_video:
-                # Ensure bilingual subtitles exist
-                await _ensure_bilingual_subtitles(
-                    existing_video, static_folder, session
-                )
-
+                await _ensure_bilingual_subtitles(existing_video, static_folder, session)
                 # Check if current user has watched this video
-                if not await _has_current_user_watched_video(
-                        current_user.id, existing_video.id, session
-                ):
-                    await _process_existed_video_for_new_user(
-                        current_user, existing_video.id, session
-                    )
+                if await _has_current_user_watched_video(current_user.id, existing_video.id, session):
+                    return existing_video
+                await _process_existed_video_for_new_user(current_user, existing_video.id, valid_pos, session)
                 return existing_video
 
-            return await _process_new_video(
-                url, ytb_id, static_folder, current_user, session
-            )
+            else:
+                return await _process_new_video(url, ytb_id, static_folder, current_user, valid_pos, session)
 
     except HTTPException:
         raise
@@ -98,29 +94,61 @@ async def _has_current_user_watched_video(
 
 
 async def _process_existed_video_for_new_user(
-        user: User, video_id: int, session: AsyncSession
+        user: User, video_id: int, valid_pos: List[str], session: AsyncSession
 ):
     """Process existed video for user who hasn't watched it before."""
+    # Load the spacy model for English
+    nlp_en = spacy.load("en_core_web_lg")
+
     # Fetch word IDs from Video
     stmt = select(Video.word_ids).where(Video.id == video_id)
     word_ids = (await session.execute(stmt)).scalar_one_or_none()
 
     if word_ids:
-        user.word_ids.extend(word_ids)
-        user.video_ids.append(video_id)
-
-        # Ensure no duplicates
-        user.word_ids = list(set(user.word_ids))
-        user.video_ids = list(set(user.video_ids))
+        user.video_ids = list(set(user.video_ids + [video_id]))
+        user.word_ids = list(set(user.word_ids + video_word_ids))
 
         session.add(user)
         await session.flush()
+
+    # Update Vocabulary and Families
+    stmt = select(Vocabulary).where(Vocabulary.user_id == user.id)
+    vocabulary = (await session.execute(stmt)).scalar_one_or_none()
+    if video_word_ids:
+        # Update user video and word associations
+        if vocabulary:
+            vocabulary_dict = vocabulary.to_dict()
+            # Iterate over the word_ids from this video and update the word_ids in the current user's Vocabulary,
+            # collect all the words which fits the valid_pos and not stop words
+            for word_id in word_ids:
+                stmt = select(Word).where(Word.id == word_id)
+                word = (await session.execute(stmt)).scalar_one_or_none()
+                if word and word.language == "en" and not nlp_en.vocab[word.lemma].is_stop and word.pos in valid_pos:
+                    key = f"{word.lemma};{word.pos}"
+                    if key not in vocabulary_dict:
+                        vocabulary_dict[key] = []
+                    vocabulary_dict[key].append([word.id, word.lemma])
+            session.add(vocabulary)
+            await session.flush()
+
+            # If any value in words has more than 5 words, logger it
+            for key, value in vocabulary_dict.items():
+                if len(value) > 5:
+                    logger.info(f"Family {key} has {len(value)} words.")
+
+        else:
+            logger.error(f"No vocabulary found for user {user.id}")
+            raise HTTPException(status_code=404, detail=f"No vocabulary found for user {user.id}")
+
+    else:
+        logger.error(f"Vocabulary not found for user {user.id}")
+        raise HTTPException(status_code=404, detail="Vocabulary not found for user with id {user.id}")
 
     logger.info(f"Updated user {user.id} with video {video_id} and associated words.")
 
 
 async def _process_new_video(
-        url: str, ytb_id: str, static_folder: str, user: User, session: AsyncSession
+        url: str, ytb_id: str, static_folder: str, user: User, valid_pos: List[str], session: AsyncSession
 ) -> Video:
     """Download and process new video."""
     try:
@@ -137,12 +165,11 @@ async def _process_new_video(
         )
         session.add(new_video)
         await session.flush()
-        # The zh_text, en_text columns in Video table, and the other tables are created in the SubtitleProcessor.
 
         # Process subtitles for all tables for new videos
         subtitle_processor = SubtitleProcessor()
         await subtitle_processor.process_subtitles(
-            video_id=new_video.id, user_uuid=user.uuid, session=session
+            ytb_id=new_video.ytb_id, user_uuid=user.uuid, valid_pos=valid_pos, session=session
         )
 
         return new_video
