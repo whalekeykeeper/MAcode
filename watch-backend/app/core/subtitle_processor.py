@@ -436,7 +436,13 @@ class SubtitleProcessor:
 
     async def _initiate_vocabulary(self, user_id: int, valid_pos: List[str], session: AsyncSession) \
             -> Dict[str, List[List[Union[int, str]]]]:
-        """Select user as current user and return word_ids."""
+        """If the user has no vocabulary, create one."""
+        # First, check if the current user has a vocabulary
+        stmt = select(Vocabulary).where(Vocabulary.user_id == user_id)
+        vocabulary = (await session.execute(stmt)).scalar_one_or_none()
+        if vocabulary:
+            logger.info(f"User {user_id} already has a vocabulary.")
+            return vocabulary.vocabulary
 
         # Select all “en” words for the user for later learning purpose
         stmt = select(User).where(User.id == user_id)
@@ -508,8 +514,6 @@ class SubtitleProcessor:
                 user_id=user_id,
                 lemma=key,
                 word_ids=value,
-                mastery=0.5,
-                acquired=False,
             )
             session.add(family_entry)
         self.new_video_stats["en"]["new_families"] = len(families)
@@ -518,8 +522,9 @@ class SubtitleProcessor:
 
         return families
 
-    async def _initiate_graph(self, user_id: int, session: AsyncSession,
-                              similarity_threshold) -> None:
+    @staticmethod
+    async def _initiate_graph(user_id: int, session: AsyncSession,
+                              similarity_threshold: float = 0.3) -> None:
 
         """
         Build a graph connecting families based on vector similarity.
@@ -541,36 +546,6 @@ class SubtitleProcessor:
         if not families:
             logger.info(f"No families found for user {user_id}.")
             return
-
-        graph_data = await self._build_graph(families, session, similarity_threshold)
-
-        # Save the graph in the database
-        graph_entry = Graph(user_id=user_id, graph=graph_data)
-        session.add(graph_entry)
-        await session.flush()
-        await session.commit()
-
-        logger.info(f"Graph for user {user_id} built and stored in the database.")
-
-    # async def print_stats_for_new_video(self) -> None:
-    #     for key, value in self.new_video_stats.items():
-    #         print(f"---------\nFor language: {key}")
-    #         for k, v in value.items():
-    #             print(f"Count for {k} is {v}")
-    #         print()
-
-    @staticmethod
-    async def _build_graph(families: List[Families], session: AsyncSession,
-                           similarity_threshold) -> dict:
-        """
-        Build a graph connecting families based on vector similarity with degree restriction.
-        Args:
-            families: List of Families objects.
-            similarity_threshold: Minimum similarity to create an edge. Defaults to 0.3.
-
-        Returns:
-            A graph dictionary to be stored in the database.
-        """
 
         if similarity_threshold == 0.0:
             # Flatten vectors and map them to families
@@ -653,7 +628,21 @@ class SubtitleProcessor:
 
         # Convert the graph to a serializable format
         graph_data = nx.node_link_data(graph)
-        return graph_data
+
+        # Save the graph in the database
+        graph_entry = Graph(user_id=user_id)
+        session.add(graph_entry)
+        await session.flush()
+        await session.commit()
+
+        logger.info(f"Graph for user {user_id} built and stored in the database.")
+
+    # async def print_stats_for_new_video(self) -> None:
+    #     for key, value in self.new_video_stats.items():
+    #         print(f"---------\nFor language: {key}")
+    #         for k, v in value.items():
+    #             print(f"Count for {k} is {v}")
+    #         print()
 
     async def stats_for_subtitles(self, session: AsyncSession, user_id: int) -> dict:
         """
@@ -722,22 +711,22 @@ class SubtitleProcessor:
         avg_family_size_en = sum(family_sizes_en) / len(family_sizes_en) if family_sizes_en else 0
         stats["avg_family_size_en"] = avg_family_size_en
 
-        # Mastery levels for families (for English only)
-        mastery_levels_en = [family.mastery for family in families]
-        avg_mastery_en = sum(mastery_levels_en) / len(mastery_levels_en) if mastery_levels_en else 0
-        stats["avg_mastery_en"] = avg_mastery_en
+        # # Mastery levels for families (for English only)
+        # mastery_levels_en = [family.mastery for family in families]
+        # avg_mastery_en = sum(mastery_levels_en) / len(mastery_levels_en) if mastery_levels_en else 0
+        # stats["avg_mastery_en"] = avg_mastery_en
 
-        # Degree of families in the graph (for English only)
-        stmt = select(Graph).where(Graph.user_id == user_id)
-        graph = (await session.execute(stmt)).scalar_one_or_none()
-        if graph and graph.graph:
-            import networkx as nx
-            network = nx.node_link_graph(graph.graph)
-            degrees = [d for node, d in network.degree if node in [family.lemma for family in families]]
-            max_degree_en = max(degrees) if degrees else 0
-            avg_degree_en = sum(degrees) / len(degrees) if degrees else 0
-            stats["max_degree_en"] = max_degree_en
-            stats["avg_degree_en"] = avg_degree_en
+        # # Degree of families in the graph (for English only)
+        # stmt = select(Graph).where(Graph.user_id == user_id)
+        # graph = (await session.execute(stmt)).scalar_one_or_none()
+        # if graph and graph.graph:
+        #     import networkx as nx
+        #     network = nx.node_link_graph(graph.graph)
+        #     degrees = [d for node, d in network.degree if node in [family.lemma for family in families]]
+        #     max_degree_en = max(degrees) if degrees else 0
+        #     avg_degree_en = sum(degrees) / len(degrees) if degrees else 0
+        #     stats["max_degree_en"] = max_degree_en
+        #     stats["avg_degree_en"] = avg_degree_en
 
         return stats
 
@@ -956,8 +945,7 @@ if __name__ == "__main__":
                 for family in families:
                     print(
                         f"ID: {family.id}, User ID: {family.user_id}, Family lemma: {family.lemma}, "
-                        f"word_ids' length: {len(family.word_ids)}, Mastery: {family.mastery}, Acquired:"
-                        f" {family.acquired}",
+                        f"word_ids' length: {len(family.word_ids)}, ",
                     )
 
                 # Get all the words for current video when pos is in valid_pos, except word.lemma is stop word,
