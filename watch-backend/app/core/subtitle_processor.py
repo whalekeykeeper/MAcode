@@ -2,6 +2,8 @@ from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple, Union
 from uuid import uuid4
 
+import networkx as nx
+import numpy as np
 import spacy
 import webvtt
 from spacy.tokens import Token
@@ -9,7 +11,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.logger import logger
-from app.models import User, Video, Vocabulary, Families
+from app.models import Graph, Families
+from app.models import User, Video, Vocabulary
 from utils.cefr_level_detector import detect_cefrj_level
 
 
@@ -124,6 +127,7 @@ class SubtitleProcessor:
     def __init__(self):
         self.nlp_en = spacy.load("en_core_web_lg")
         self.nlp_zh = spacy.load("zh_core_web_lg")
+        self.new_video_stats = {"zh": {}, "en": {}}
 
     async def process_subtitles(
             self,
@@ -150,9 +154,7 @@ class SubtitleProcessor:
         )
 
         # Create lines (word_ids are empty for now) and return a mapping.
-        lines_dict_bi = await self._create_line_entries(
-            subtitle_lines, video.id, session
-        )
+        lines_dict_bi = await self._create_line_entries(subtitle_lines, video.id, session)
 
         # Parse lines_dict to get sentences and tokens
         for language in ["zh", "en"]:
@@ -160,9 +162,8 @@ class SubtitleProcessor:
                 lines_dict_bi[language], language
             )
             # Create sentence entries and word entries basing on sentence_data_list and token_data_list
-            await self._create_sentence_word_entries(
-                sentence_collection, token_collection, language, video.id, session
-            )
+            await self._create_sentence_word_entries(sentence_collection, token_collection, language, video.id, session
+                                                     )
 
         await self._update_word_ids_and_texts(
             video, user, full_zh_text, full_en_text, session
@@ -176,6 +177,10 @@ class SubtitleProcessor:
 
             families_dict = await self._initiate_family(user.id, vocabulary_dict, session)
             logger.info(f"Created families for user {user.id}, the length of the families is {len(families_dict)}")
+
+            # Build the graph
+            await self._build_graph(user.id, session)
+            await self.print_stats_for_new_video()
 
         else:
             pass
@@ -312,10 +317,9 @@ class SubtitleProcessor:
             logger.error(f"Error reading subtitle file: {str(e)}")
             raise
 
-    @staticmethod
-    async def _create_line_entries(
-            sub_lines: List[SubtitleLine], video_id: int, session: AsyncSession
-    ) -> dict[str, dict[int, str]]:
+    async def _create_line_entries(self,
+                                   sub_lines: List[SubtitleLine], video_id: int, session: AsyncSession
+                                   ) -> dict[str, dict[int, str]]:
         """Create Line entries for each subtitle line and return a mapping."""
         lines_dict_bi = {}
         lines_zh = {}
@@ -347,7 +351,6 @@ class SubtitleProcessor:
                 )
                 session.add(en_line)
                 line_objects.append(("en", en_line))
-
         # Flush to get all IDs
         await session.flush()  # After this line, each line_obj in line_objects has its id populated
 
@@ -364,16 +367,17 @@ class SubtitleProcessor:
 
         lines_dict_bi["zh"] = lines_zh
         lines_dict_bi["en"] = lines_en
+        self.new_video_stats["zh"]["new_lines"] = len(lines_zh)
+        self.new_video_stats["en"]["new_lines"] = len(lines_zh)
         return lines_dict_bi
 
-    @staticmethod
-    async def _create_sentence_word_entries(
-            sentence_collection: List[Dict[str, List[int]]],
-            token_collection: List[Dict[str, str]],
-            language: str,
-            video_id: int,
-            session: AsyncSession,
-    ) -> None:
+    async def _create_sentence_word_entries(self,
+                                            sentence_collection: List[Dict[str, List[int]]],
+                                            token_collection: List[Dict[str, str]],
+                                            language: str,
+                                            video_id: int,
+                                            session: AsyncSession,
+                                            ) -> None:
         """Create Sentence and Word entries for each sentence and token."""
         # Create all Sentence objects
         for sent in sentence_collection:
@@ -386,7 +390,10 @@ class SubtitleProcessor:
             session.add(sentence_entry)
         # Flush to get all sentence IDs
         await session.flush()
-
+        if language == "zh":
+            self.new_video_stats["zh"]["new_sentences"] = len(sentence_collection)
+        if language == "en":
+            self.new_video_stats["en"]["new_sentences"] = len(sentence_collection)
         logger.info(f"Created {len(sentence_collection)} sentences for {language}.")
 
         logger.info(f"Starting to create words for {language}...")
@@ -413,9 +420,14 @@ class SubtitleProcessor:
                 vector=token_data.get("vector", None),
             )
             session.add(word)
+        if language == "zh":
+            self.new_video_stats["zh"]["new_words"] = len(token_collection)
+        if language == "en":
+            self.new_video_stats["en"]["new_words"] = len(token_collection)
         logger.info(f"Created {len(token_collection)} words for {language}.")
         # Final flush to save all Word and WordContext entries
         await session.flush()
+        await session.commit()
 
     async def _initiate_vocabulary(self, user_id: int, valid_pos: List[str], session: AsyncSession) -> Dict[str,
     List[List[Union[int, str]]]]:
@@ -431,7 +443,7 @@ class SubtitleProcessor:
         # Filter words: remove stop words and keep only certain POS
         filtered_words = [
             word for word in words
-            if ((word.language == "en" and not self.nlp_en.vocab[word.word].is_stop
+            if ((word.language == "en" and not self.nlp_en.vocab[word.lemma].is_stop
                  and word.pos in valid_pos))
         ]
 
@@ -443,10 +455,16 @@ class SubtitleProcessor:
                 vocabulary_dict[key] = []
             vocabulary_dict[key].append([word.id, word.lemma])
 
+        self.new_video_stats["en"]["new_lemma_pos_pairs"] = len(vocabulary_dict)
+
         # If any value in words has more than 5 words, logger it
+        lemma_pos_pairs_has_more_than_5_occurrences = 0
         for key, value in vocabulary_dict.items():
             if len(value) > 5:
                 logger.info(f"Family {key} has {len(value)} words.")
+                lemma_pos_pairs_has_more_than_5_occurrences += 1
+        self.new_video_stats["en"][
+            "lemma_pos_pairs_has_more_than_5_occurrences"] = lemma_pos_pairs_has_more_than_5_occurrences
 
         # Create vocabulary entry and update User table
         vocabulary_entry = Vocabulary(
@@ -464,11 +482,10 @@ class SubtitleProcessor:
 
         return vocabulary_dict
 
-    @staticmethod
-    async def _initiate_family(
-            user_id: int,
-            vocabulary_dict: Dict[str, List[List[Union[int, str]]]],
-            session: AsyncSession) -> Dict[str, List[int]]:
+    async def _initiate_family(self,
+                               user_id: int,
+                               vocabulary_dict: Dict[str, List[List[Union[int, str]]]],
+                               session: AsyncSession) -> Dict[str, List[int]]:
         # Create Nodes. Each node is a dictionary with lemma as key, a list of word_ids as value. Each node is a family, i.e, an entry in the family table.
         families = {}
         for ele in vocabulary_dict.values():
@@ -481,17 +498,97 @@ class SubtitleProcessor:
 
         # Update the family table with multiple family
         for key, value in families.items():
+            # Calculate the vector for each family
+            with session.no_autoflush:
+                family_vector = await self._calculate_family_vector(value, session)
             family_entry = Families(
                 user_id=user_id,
                 family={key: value},
+                family_vector=family_vector,
                 mastery=0.5,
                 acquired=False,
             )
             session.add(family_entry)
+        self.new_video_stats["en"]["new_families"] = len(families)
         await session.flush()
         await session.commit()
 
         return families
+
+    @staticmethod
+    async def _calculate_family_vector(word_ids: List[int], session: AsyncSession) -> List[float]:
+        """Calculate the family_vector for a family of words."""
+        stmt = select(Word).where(Word.id.in_(word_ids))
+        words = (await session.execute(stmt)).scalars().all()
+        family_vector = np.mean([member.vector for member in words], axis=0).tolist()
+        return family_vector
+
+    @staticmethod
+    async def _build_graph(user_id: int, session: AsyncSession, similarity_threshold: float = 0.30) -> None:
+        """
+        Build a graph connecting families based on vector similarity.
+
+        Args:
+            user_id: The ID of the current user.
+            session: The database session.
+            similarity_threshold: Minimum similarity to create an edge.
+
+        Returns:
+            None: The graph is stored in the database.
+        """
+        # Retrieve all families for the user
+        logger.info(f"Building graph for user {user_id}...")
+        stmt = select(Families).where(Families.user_id == user_id)
+        families = (await session.execute(stmt)).scalars().all()
+
+        if not families:
+            logger.info(f"No families found for user {user_id}.")
+            return
+
+        family_vectors = []
+        family_names = []
+
+        for family in families:
+            if family.family_vector:  # Ensure the family has a valid vector
+                family_vectors.append(family.family_vector)
+                family_names.append(list(family.family.keys())[0])  # Use the lemma as the family name
+
+        # Convert to NumPy array for similarity computation
+        vectors = np.array(family_vectors)
+        norms = np.linalg.norm(vectors, axis=1, keepdims=True)
+        normalized_vectors = vectors / norms
+        similarity_matrix = np.dot(normalized_vectors, normalized_vectors.T)
+
+        # Create a weighted adjacency list
+        weighted_adj_list = []
+        for i, name_i in enumerate(family_names):
+            for j, name_j in enumerate(family_names):
+                if i != j and similarity_matrix[i, j] > similarity_threshold:
+                    weighted_adj_list.append((name_i, name_j, similarity_matrix[i, j]))
+
+        # Build the graph using networkx
+        graph = nx.Graph()
+        graph.add_nodes_from(family_names)
+        graph.add_weighted_edges_from(weighted_adj_list)
+        nx.set_node_attributes(graph, 0.5, "mastery")  # Set default mastery for all nodes
+
+        # Serialize the graph to JSON
+        graph_data = nx.readwrite.json_graph.node_link_data(graph)
+
+        # Save the graph in the database
+        graph_entry = Graph(user_id=user_id, graph=graph_data)
+        session.add(graph_entry)
+        await session.flush()
+        await session.commit()
+
+        logger.info(f"Graph for user {user_id} built and stored in the database.")
+
+    async def print_stats_for_new_video(self) -> None:
+        for key, value in self.new_video_stats.items():
+            print(f"---------\nFor language: {key}")
+            for k, v in value.items():
+                print(f"Count for {k} is {v}")
+            print()
 
 
 if __name__ == "__main__":
@@ -707,8 +804,25 @@ if __name__ == "__main__":
                 print(f"\nTop 3 Families:")
                 for family in families:
                     print(
-                        f"ID: {family.id}, User ID: {family.user_id}, Family: {family.family}, Mastery: {family.mastery}, Acquired: {family.acquired}",
+                        f"ID: {family.id}, User ID: {family.user_id}, Family: {family.family}, "
+                        f"Vector length: {len(family.family_vector)}, Mastery: {family.mastery}, Acquired:"
+                        f" {family.acquired}",
                     )
+
+                # Get all the words for current video when pos is in valid_pos, except word.lemma is stop word,
+                # query to get all the lemmas and pos, compare the number of lemmas and unique lemma-pos pairs.
+                stmt = select(Word).where(Word.video_id == video1.id)
+                words = (await session.execute(stmt)).scalars().all()
+                lemmas = set()
+                lemma_pos_pairs = set()
+                nlp_en = spacy.load("en_core_web_lg")
+                for word in words:
+                    if (not nlp_en.vocab[word.lemma].is_stop) and word.pos in ["NOUN", "VERB", "ADJ", "ADV",
+                                                                               "PROPN", "INTJ"]:
+                        lemmas.add(word.lemma)
+                        lemma_pos_pairs.add((word.lemma, word.pos))
+                print(f"\nTotal lemmas: {len(lemmas)}")
+                print(f"Total lemma-pos pairs: {len(lemma_pos_pairs)}")
 
                 print("\nTest completed successfully!")
 
