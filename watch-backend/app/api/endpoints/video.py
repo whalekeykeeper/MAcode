@@ -1,11 +1,15 @@
 # /app/api/endpoints/video.py
 
+import itertools
+import time
+from collections import defaultdict
 from pathlib import Path
-from typing import List
-from typing import Optional
+from typing import Dict, List, Optional, Union
 
+import networkx as nx
+import numpy as np
 import spacy
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException
 from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
@@ -15,8 +19,7 @@ from app.core.bilingual_subtitle_creator import create_bilingual_vtt
 from app.core.logger import logger
 from app.core.subtitle_processor import SubtitleProcessor
 from app.core.video_subtitles_downloader import download_video_and_subtitles, get_ytb_id
-from app.models import User, Video
-from app.models import Word, Vocabulary
+from app.models import Families, Graph, User, Video, Vocabulary, Word
 from app.schemas.requests import VideoRequest
 from app.schemas.responses import VideoResponse
 
@@ -32,44 +35,53 @@ async def download_and_process_video_and_subtitles(
         new_video: VideoRequest,
         session: AsyncSession = Depends(deps.get_session),
         current_user: User = Depends(deps.get_current_user),
+        x_user_uuid: Optional[str] = Header(None)
 ):
-    """Process video request with proper transaction management.
+    """Process video request with proper transaction management."""
+    logger.debug(f"Request received")
+    logger.debug(f"Headers: {x_user_uuid}")
+    logger.debug(f"Request body: {new_video}")
+    start_time = time.time()  # Record start time
 
-    Note: ytb_id is always called ytb_id in the database and in this code base. video_id is
-    called id in the database.
-    """
     url = new_video.video_url
     ytb_id = get_ytb_id(url)
-    static_folder = "static"
+    static_folder = Path(__file__).parent.parent.parent.parent / "static"
 
     try:
-        async with session.begin():
-            # Check if ytb_id already in the database.
-            existing_video = await _get_existing_video(ytb_id, session)
+        # Check if ytb_id already in the database.
+        existing_video = await _get_existing_video(ytb_id, session)
 
-            if existing_video:  # If video already exists in the database
-                logger.info(f"Video {ytb_id} already exists in the database.")
-                await _ensure_bilingual_subtitles(existing_video, static_folder, session)
-                if await current_user_has_watched(current_user.id, existing_video.id, session):
-                    # If the user has already watched the video, do nothing, just return the video.
-                    logger.info(f"User {current_user.id} has already watched video {existing_video.id}.")
-                    return existing_video
-                # If the user hasn't watched the video, process the video for the user.
-                await _process_existed_video_for_new_user(current_user, existing_video.id, session)
-                logger.info(f"Start to process existed video {ytb_id} for user {current_user.id}.")
+        if existing_video:  # If video already exists in the database
+            logger.info(f"Video {ytb_id} already exists in the database.")
+            await _ensure_bilingual_subtitles(existing_video, static_folder, session)
+            if await current_user_has_watched(current_user.id, existing_video.id, session):
+                # If the user has already watched the video, do nothing, just return the video.
+                logger.info(f"User {current_user.id} has already watched video {existing_video.id}.")
                 return existing_video
+            # If the user hasn't watched the video, process the video for the user.
+            await _process_existed_video_for_new_user(current_user, existing_video.id, session)
+            logger.info(f"Start to process existed video {ytb_id} for user {current_user.id}.")
+            await session.commit()
+            return existing_video
 
-            else:
-                logger.info(f"Video {ytb_id} does not exist in the database. Start to process its subtitle.")
-                return await _process_new_video(url, ytb_id, static_folder, current_user, session)
+        else:
+            logger.info(f"Video {ytb_id} does not exist in the database. Start to process its subtitle.")
+            new_video = await _process_new_video(url, ytb_id, static_folder, current_user, session)
+            await session.commit()
+            return new_video
 
     except HTTPException:
+        await session.rollback()
         raise
     except Exception as e:
         await session.rollback()
         raise HTTPException(
             status_code=500, detail=f"Failed to process video request: {str(e)}"
         )
+    finally:
+        end_time = time.time()  # Record end time
+        elapsed_time = end_time - start_time
+        logger.info(f"Runtime of the function: {elapsed_time:.2f} seconds")
 
 
 async def _get_existing_video(ytb_id: str, session: AsyncSession) -> Optional[Video]:
@@ -79,15 +91,15 @@ async def _get_existing_video(ytb_id: str, session: AsyncSession) -> Optional[Vi
 
 
 async def _ensure_bilingual_subtitles(
-        video: Video, static_folder: str, session: AsyncSession
+        video: Video, static_folder: Path, session: AsyncSession
 ):
     """Ensure bilingual subtitles exist for the video."""
-    bilingual_vtt_path = f"{static_folder}/{video.ytb_id}/{video.ytb_id}_bilingual.vtt"
-    if not Path(bilingual_vtt_path).exists():
+    bilingual_vtt_path = static_folder / video.ytb_id / f"{video.ytb_id}_bilingual.vtt"
+    if not bilingual_vtt_path.exists():
         video.vtt_path = create_bilingual_vtt(video.ytb_id, static_folder)
         session.add(video)
         logger.info(
-            f"Bilingual subtitles created for video {video.ytb_id}. Check why the bilingual subtitle isnot created."
+            f"Bilingual subtitles created for video {video.ytb_id}. Check why the bilingual subtitle is not created."
         )
 
 
@@ -121,51 +133,67 @@ async def _process_existed_video_for_new_user(
 
 
 async def _process_new_video(
-        url: str, ytb_id: str, static_folder: str, user: User, session: AsyncSession
+        url: str,
+        ytb_id: str,
+        static_folder: Path,
+        user: User,
+        session: AsyncSession
 ) -> Video:
     """Download and process new video."""
     try:
+        from pathlib import Path
         # Download video and create subtitles
         download_video_and_subtitles(ytb_id, url, static_folder)
         bilingual_vtt_path = create_bilingual_vtt(ytb_id, static_folder)
 
+        logger.debug(f"Video {ytb_id} downloaded and bilingual subtitles created.")
+        logger.debug(f"Start to process new video {ytb_id} for user {user.id}.")
         # Create video entry, mainly for generating id.
         new_video = Video(
             url=url,
             ytb_id=ytb_id,
             video_path=f"{static_folder}/{ytb_id}/{ytb_id}.mp4",
-            vtt_path=bilingual_vtt_path,
+            vtt_path=str(bilingual_vtt_path),
         )
         session.add(new_video)
         await session.flush()
 
+        logger.debug(f"Video {ytb_id} created in the database.")
         # Process subtitles for all tables for new videos
         subtitle_processor = SubtitleProcessor()
         await subtitle_processor.process_subtitles(
-            ytb_id=new_video.ytb_id, user_uuid=user.uuid, valid_pos=VALID_POS, session=session
+            ytb_id=new_video.ytb_id,
+            user_uuid=user.uuid,
+            valid_pos=VALID_POS,
+            session=session
         )
 
         stmt = select(Video.word_ids).where(Video.id == new_video.id)
         video_word_ids = (await session.execute(stmt)).scalar_one_or_none()
-
+        logger.debug(f"Video {ytb_id} processed for user {user.id}.")
         if video_word_ids:
-            await process_user_specific_data(session, user, video_id, video_word_ids)
-
+            logger.info(f"-----Start to process user-specific data for user {user.id}.")
+            await process_user_specific_data(session, user, new_video.id, video_word_ids)
         else:
             logger.error(f"word_list of video {new_video.id} not found for user {user.id}")
-            raise HTTPException(status_code=404,
-                                detail=f"word_list of video {new_video.id} not found for user {user.id}")
+            raise HTTPException(
+                status_code=404,
+                detail=f"word_list of video {new_video.id} not found for user {user.id}"
+            )
 
         return new_video
 
     except Exception as e:
+        logger.error(f"Error processing new video: {str(e)}")
         raise HTTPException(
-            status_code=500, detail=f"Failed to process new video: {str(e)}"
+            status_code=500,
+            detail=f"Failed to process new video: {str(e)}"
         )
 
 
 async def process_user_specific_data(session: AsyncSession, user: User, video_id: int,
                                      video_word_ids: List[int]) -> None:
+    logger.info(f"------Processing vocabulary, family, graph for user {user.id}...")
     user.video_ids = list(set(user.video_ids + [video_id]))
     user.word_ids = list(set(user.word_ids + video_word_ids))
     session.add(user)
@@ -174,7 +202,7 @@ async def process_user_specific_data(session: AsyncSession, user: User, video_id
 
     # Check if user has entries in Families table, if not, initiate it, else update it
     stmt = select(Families).where(Families.user_id == user.id)
-    families = (await session.execute(stmt)).scalar_one_or_none()
+    families = (await session.execute(stmt)).scalars().all()
     if families:
         await _update_family_with_new_words(user.id, new_words, session)
     else:
@@ -192,35 +220,37 @@ async def process_user_specific_data(session: AsyncSession, user: User, video_id
     logger.info(f"Processed vocabulary, family, graph for user {user.id}.")
 
 
-async def initiate_or_update_vocabulary(session: AsyncSession, user: User, video_word_ids: List[int]) -> Dict[str, int]:
+async def initiate_or_update_vocabulary(session: AsyncSession, user: User, video_word_ids: List[int]) \
+        -> Dict[str, List[List[Union[int, str]]]]:
+    logger.info(f"------Initiating or updating vocabulary for user {user.id}...")
     # Check if current user has Vocabulary, if not, initiate it, else update it
     stmt = select(Vocabulary).where(Vocabulary.user_id == user.id)
     vocabulary = (await session.execute(stmt)).scalar_one_or_none()
     new_words = {}  # Collect new words added to the vocabulary
 
+    logger.info(f"------Start to update vocabulary for user {user.id}...")
     if vocabulary:
         vocabulary_dict = vocabulary.vocabulary
         for word_id in video_word_ids:
             stmt = select(Word).where(Word.id == word_id)
             word = (await session.execute(stmt)).scalar_one_or_none()
-            if word and word.language == "en" and not NLP_EN.vocab[word.lemma].is_stop and word.pos in VALID_POS:
+            if word and word.language == "en" and not NLP_EN.vocab[str(word.lemma)].is_stop and word.lemma in VALID_POS:
                 key = f"{word.lemma};{word.pos}"
                 if key not in vocabulary_dict:
                     vocabulary_dict[key] = []
-                new_words[lemma] = word.id
+                    new_words[lemma] = []
                 vocabulary_dict[key].append([word.id, word.lemma])
+                new_words[key].append([word.id, word.lemma])
                 await detect_lemma_pos_pair_with_multiple_occrrences(vocabulary_dict)
         session.add(vocabulary)
         await session.flush()
-        looger.info(f"Vocabulary for user {user.id} updated with new words.")
+        logger.info(f"-----Vocabulary for user {user.id} updated with new words.")
 
     else:
         logger.info(f"Vocabulary not found for user {user.id}. Initiating vocabulary.")
         vocabulary_dict = await _initiate_vocabulary(user.id, session)
         await detect_lemma_pos_pair_with_multiple_occrrences(vocabulary_dict)
-        for key, value in vocabulary_dict.items():
-            for id_lemma_list in value:
-                new_words[id_lemma_list[1]] = id_lemma_list[0]
+        new_words = vocabulary_dict
         logger.info(f"Vocabulary for user {user.id} initiated.")
 
     return new_words
@@ -254,7 +284,7 @@ async def _initiate_vocabulary(user_id: int, session: AsyncSession) -> Dict[str,
     # Filter words: remove stop words and keep only certain POS
     filtered_words = [
         word for word in words
-        if ((word.language == "en" and not self.NLP_EN.vocab[word.lemma].is_stop
+        if ((word.language == "en" and not NLP_EN.vocab[word.lemma].is_stop
              and word.pos in VALID_POS))
     ]
 
@@ -284,6 +314,7 @@ async def _initiate_vocabulary(user_id: int, session: AsyncSession) -> Dict[str,
 
 
 async def _initiate_families(user_id: int, session: AsyncSession) -> None:
+    logger.info(f"Initiating families for user {user_id}...")
     """Initialize families for a user based on their vocabulary."""
     vocabulary_dict = (
         await session.execute(select(Vocabulary).where(Vocabulary.user_id == user_id))).scalar_one().vocabulary
@@ -314,28 +345,37 @@ async def _initiate_families(user_id: int, session: AsyncSession) -> None:
 
 async def _update_family_with_new_words(
         user_id: int,
-        new_words: Dict[str, int],
-        session: AsyncSession,
-) -> None:
+        new_words: Dict[str, List[List[Union[int, str]]]],
+        session: AsyncSession) -> None:
+    logger.info(f"Updating Families for user {user_id} with new words.")
     """Update Families table with only new words."""
 
-    # Update Families table
+    # Fetch existing families for the user
     stmt = select(Families).where(Families.user_id == user_id)
-    existing_families = {family.lemma: family for family in (await session.execute(stmt)).scalars().all()}
+    existing_families = {
+        family.lemma: family for family in (await session.execute(stmt)).scalars().all()
+    }
 
-    for lemma, word_ids in new_words.items():
+    # Update or create families with new words
+    for lemma, words in new_words.items():
         if lemma in existing_families:
+            # Family exists; update word_ids
             family = existing_families[lemma]
-            family.word_ids = list(set(family.word_ids + word_ids))
+            existing_word_ids = set(family.word_ids)
+            for word in words:
+                if word[0] not in existing_word_ids:  # word[0] is the word_id
+                    family.word_ids.append(word[0])
             session.add(family)
         else:
-            family_entry = Families(
+            # Create a new family
+            new_family = Families(
                 user_id=user_id,
                 lemma=lemma,
-                word_ids=word_ids,
+                word_ids=[word[0] for word in words],
             )
-            session.add(family_entry)
+            session.add(new_family)
 
+    # Commit the changes
     await session.flush()
     await session.commit()
     logger.info(f"Families for user {user_id} updated with new words.")
@@ -356,7 +396,7 @@ async def _initiate_graph(user_id: int, session: AsyncSession,
         None: The graph is stored in the database.
     """
     # Retrieve all families for the user
-    logger.info(f"Building graph for user {user_id} with similarity_threshold {similarity_threshold}...")
+    logger.info(f"-----Building graph for user {user_id} with similarity_threshold {similarity_threshold}...")
     stmt = select(Families).where(Families.user_id == user_id)
     families = (await session.execute(stmt)).scalars().all()
 
@@ -364,31 +404,46 @@ async def _initiate_graph(user_id: int, session: AsyncSession,
         logger.info(f"No families found for user {user_id}.")
         return
 
+    vectors_list = []
     if similarity_threshold == 0.0:
         # Flatten vectors and map them to families
         relation = defaultdict(list)
-        vectors = []
         for family in families:
             for word_id in family.word_ids:
                 result = await session.execute(select(Word).where(Word.id == word_id))
                 word = result.scalar_one()
-                relation[family.lemma].append(len(vectors))
-                vectors.append(word.vector)
-        vectors = np.array(vectors)
+                if word.vector is not None:
+                    relation[family.lemma].append(len(vectors_list))
+                    vectors_list.append(word.vector)
+                else:
+                    logger.info(f"Word {word.lemma} has no vector.")
     else:
-        vectors = []
         for family in families:
             word_vectors = []
             for word_id in family.word_ids:
                 result = await session.execute(select(Word).where(Word.id == word_id))
                 word = result.scalar_one()
-                word_vectors.append(word.vector)
+                if word.vector is not None:
+                    word_vectors.append(word.vector)
+                else:
+                    logger.info(f"Word {word.lemma} has no vector.")
             # Compute the mean of the word vectors for the family
-            vectors.append(np.mean(word_vectors, axis=0))
-        vectors = np.array(vectors)
+            if word_vectors:
+                vectors_list.append(np.mean(word_vectors, axis=0))
+            else:
+                logger.warning(f"Family {family.lemma} has no valid word vectors and will be skipped.")
+    # Convert list to NumPy array after collecting all vectors
+    if not vectors_list:
+        logger.error(f"No valid vectors found for user {user_id}. Cannot build graph.")
+        return
+    vectors = np.array(vectors_list)
 
     # Normalize vectors and compute similarity matrix
     norms = np.linalg.norm(vectors, axis=1)
+    if np.any(norms == 0):
+        logger.error("Encountered zero norm vector during normalization.")
+        return
+
     normalized_vectors = vectors / norms[:, np.newaxis]
     similarity_matrix = np.dot(normalized_vectors, normalized_vectors.T)
 
@@ -404,6 +459,10 @@ async def _initiate_graph(user_id: int, session: AsyncSession,
             buffer = []
             for f2 in family_names[i + 1:]:
                 pairs = list(itertools.product(relation[f1], relation[f2]))
+                for x, y in pairs:
+                    if x >= len(similarity_matrix) or y >= len(similarity_matrix):
+                        logger.warning(f"Skipping out-of-bounds index: x={x}, y={y}")
+                        continue
                 score = max(similarity_matrix[x][y] for x, y in pairs)
                 if score > 0.3:
                     buffer.append((f1, f2, min(1.0, score)))
@@ -420,10 +479,16 @@ async def _initiate_graph(user_id: int, session: AsyncSession,
                     break
     else:
         families_list = [family.lemma for family in families]
+        num_families = len(families_list)
         for i, f1 in enumerate(families_list):
             buffer = []
-            for j, f2 in enumerate(families_list[i + 1:]):
-                j = i + j + 1  # Adjust index offset
+            for offset, f2 in enumerate(families_list[i + 1:]):
+                logger.debug(f"Processing similarity_matrix[{i}][{offset}]")
+                j = i + offset + 1  # Adjust index offset
+
+                if j >= num_families:
+                    logger.error(f"Index out of bounds: j={j}, num_families={num_families}")
+                    continue
                 if similarity_matrix[i][j] > similarity_threshold:
                     buffer.append((f1, f2, similarity_matrix[i][j]))
             buffer = sorted(buffer, key=lambda x: -x[2])  # Sort edges by weight
@@ -499,3 +564,8 @@ async def get_subtitles(
         raise HTTPException(status_code=404, detail="VTT file not found")
 
     return FileResponse(video.vtt_path, filename=video.vtt_path[-18:])
+
+
+@router.get("/test")
+async def test_endpoint():
+    return {"message": "Video endpoint is working"}

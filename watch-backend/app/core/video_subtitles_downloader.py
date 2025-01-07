@@ -1,8 +1,9 @@
 from __future__ import unicode_literals
 
-import os
 import re
+from pathlib import Path
 
+from fastapi import HTTPException
 from pytube import extract
 from youtube_transcript_api import YouTubeTranscriptApi
 from yt_dlp import YoutubeDL
@@ -32,7 +33,7 @@ SIMPLIFIED_CHINESE_PATTERNS = [
 
 
 def download_video_and_subtitles(
-    ytb_id: str, video_url: str, static_folder: str
+        ytb_id: str, video_url: str, static_folder: Path
 ) -> None:
     """
     A function to download YouTube video and subtitles.
@@ -53,21 +54,23 @@ def get_ytb_id(video_url: str) -> str:
     return extract.video_id(video_url)
 
 
-def _download_youtube_video(ytb_id: str, video_url: str, static_folder: str) -> None:
+def _download_youtube_video(ytb_id: str, video_url: str, static_folder: Path) -> None:
     """
     A function to download YouTube video.
     """
+    # Create directory if it doesn't exist
+    output_dir = static_folder / ytb_id
+    output_dir.mkdir(parents=True, exist_ok=True)
+
     ydl_opts = {
-        "outtmpl": os.path.join(static_folder + ytb_id + "/" + ytb_id + ".mp4"),
+        "outtmpl": str(output_dir / f"{ytb_id}.mp4"),
     }
     with YoutubeDL(ydl_opts) as ydl:
         ydl.download([video_url])
-        logger.info(
-            f"Video downloaded at: {static_folder + ytb_id + '/' + ytb_id + '.mp4'}"
-        )
+        logger.info(f"Video downloaded at: {output_dir / f'{ytb_id}.mp4'}")
 
 
-def _download_subtitles(ytb_id: str, static_folder: str):
+def _download_subtitles(ytb_id: str, static_folder: Path):
     """
     A function to download simplified Chinese and English subtitles of a YouTube video
     """
@@ -76,8 +79,8 @@ def _download_subtitles(ytb_id: str, static_folder: str):
     for element in transcript_list:
         # ToDo: check YouTube API if it is necessary to check if the transcript is generated
         if (
-            _matches_patterns(element.language_code, SIMPLIFIED_CHINESE_PATTERNS)
-            or _matches_patterns(element.language_code, ENGLISH_PATTERNS)
+                _matches_patterns(element.language_code, SIMPLIFIED_CHINESE_PATTERNS)
+                or _matches_patterns(element.language_code, ENGLISH_PATTERNS)
         ) and element.is_generated != True:
             lan = element.language
             data = element.fetch()
@@ -91,17 +94,17 @@ def _download_subtitles(ytb_id: str, static_folder: str):
 
 
 def _save_subtitle(
-    ytb_id: str,
-    lan_code: str,
-    data: Element,
-    static_folder: str,
+        ytb_id: str,
+        lan_code: str,
+        data: Element,
+        static_folder: Path,
 ):
     """
     A function to save the subtitles in .vtt format
     """
     vtt = _convert_to_vtt(data)
 
-    output_file_path = static_folder + ytb_id + "/" + ytb_id + "." + lan_code + ".vtt"
+    output_file_path = Path(static_folder) / ytb_id / f"{ytb_id}.{lan_code}.vtt"
 
     with open(output_file_path, "w", encoding="utf-8") as vtt_file:
         vtt_file.write(vtt)
@@ -190,4 +193,5 @@ if __name__ == "__main__":
         "The video has both zh and en subtitles: ",
         video_offered_with_zh_en_subtitles(ytb_id),
     )
-    download_video_and_subtitles(ytb_id, video_url, "static/")
+    static_folder = Path("app/static/")
+    download_video_and_subtitles(ytb_id, video_url, static_folder)

@@ -1,27 +1,30 @@
-import jieba
+from pathlib import Path
+
 import srt
 import webvtt
 
+from app.core.logger import logger
 
-def create_bilingual_vtt(video_id: str, static_folder: str) -> str:
+
+def create_bilingual_vtt(video_id: str, static_folder: Path) -> Path:
     """Creates bilingual VTT file by merging Chinese and English subtitles."""
-
     # Get paths for source files
-    path_zh = static_folder + f"/{video_id}/{video_id}.zh-CN.vtt"
-    path_en = static_folder + f"/{video_id}/{video_id}.en.vtt"
+    path_zh = static_folder / video_id / f"{video_id}.zh-CN.vtt"
+    path_en = static_folder / video_id / f"{video_id}.en.vtt"
 
     # Convert VTT to SRT for processing
-    zh_srt_path = _convert_vtt_to_srt(path_zh)
-    en_srt_path = _convert_vtt_to_srt(path_en)
+    zh_srt_path = _convert_vtt_to_srt(path_zh, video_id, static_folder)
+    en_srt_path = _convert_vtt_to_srt(path_en, video_id, static_folder)
 
     # Merge the subtitle files
     merged_srt_path = merge_subtitles(zh_srt_path, en_srt_path, video_id, static_folder)
+    logger.debug(f"Merged subtitles saved at: {merged_srt_path}")
 
     # Convert back to VTT for frontend display
-    return _convert_srt_to_vtt(merged_srt_path)
+    return _convert_srt_to_vtt(merged_srt_path, video_id, static_folder)
 
 
-def merge_subtitles(path1: str, path2: str, video_id: str, static_folder: str) -> str:
+def merge_subtitles(path1: Path, path2: Path, video_id: str, static_folder: Path) -> Path:
     """Merges two SRT files into one bilingual file."""
 
     # Read Chinese subtitles
@@ -97,7 +100,7 @@ def merge_subtitles(path1: str, path2: str, video_id: str, static_folder: str) -
             sub.content = f"{parts[0]}§§§{parts[1]}"
 
     # Write merged subtitles
-    output_path = f"{static_folder}/{video_id}/{video_id}_bilingual.srt"
+    output_path = static_folder / video_id / f"{video_id}_bilingual.srt"
     with open(output_path, "w", encoding="utf-8") as f:
         f.write(srt.compose(merged_subs))
 
@@ -106,26 +109,21 @@ def merge_subtitles(path1: str, path2: str, video_id: str, static_folder: str) -
     return output_path
 
 
-def _tokenize_zh(text: str) -> str:
-    """Tokenize Chinese text using jieba."""
-    words_list = list(jieba.cut(text, use_paddle=True))
-    return " ".join(words_list)
-
-
-def _convert_vtt_to_srt(vtt_path: str) -> str:
+def _convert_vtt_to_srt(vtt_path: Path, video_id: str, static_folder: Path) -> Path:
     """Converts VTT file to SRT format."""
-    vtt = webvtt.read(vtt_path)
-    srt_path = vtt_path[:-4] + ".srt"
+    vtt = webvtt.read(str(vtt_path))
+    srt_path = None
+    srt_path = static_folder / video_id / Path(vtt_path.stem + '.srt')
+    logger.info(f"Converting VTT to SRT: {vtt_path} -> {str(srt_path)}.")
     vtt.save_as_srt()
     return srt_path
 
 
-def _convert_srt_to_vtt(srt_path: str) -> str:
+def _convert_srt_to_vtt(srt_path: Path, video_id: str, static_folder: Path) -> Path:
     """Converts SRT file to VTT format."""
-    with open(srt_path, "r", encoding="utf8") as srt_file:
+    with open(srt_path, encoding="utf8") as srt_file:  # default: "r
         lines = srt_file.read().splitlines()
-
-    vtt_path = srt_path[:-4] + ".vtt"
+    vtt_path = static_folder / video_id / Path(srt_path.stem + '.vtt')
     with open(vtt_path, "w", encoding="utf8") as vtt_file:
         vtt_file.write("WEBVTT\n\n")
 
@@ -139,10 +137,9 @@ def _convert_srt_to_vtt(srt_path: str) -> str:
                 # Keep all other lines unchanged
                 vtt_file.write(lines[i] + "\n")
             i += 1
-
     return vtt_path
 
 
 if __name__ == "__main__":
-    id = "ONs9FCY74p0"
-    create_bilingual_vtt(id, "./static")
+    v_id = "ONs9FCY74p0"
+    create_bilingual_vtt(v_id, Path("./static"))

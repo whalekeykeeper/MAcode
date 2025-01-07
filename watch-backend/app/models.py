@@ -65,15 +65,15 @@ class Video(Base):
     # YouTube link
     url: Mapped[str] = mapped_column(String(250), nullable=False, unique=True)
 
-    # local storage address
+    # store Path to the video file
     video_path: Mapped[str] = mapped_column(String(250), nullable=False)
     # local storage address
     vtt_path: Mapped[str] = mapped_column(String(250), nullable=False)
 
     # full chinese subtitle
-    zh_text: Mapped[str] = mapped_column(String(1000000), nullable=False)
+    zh_text: Mapped[str] = mapped_column(String(1000000), nullable=True)
     # full english subtitle
-    en_text: Mapped[str] = mapped_column(String(1000000), nullable=False)
+    en_text: Mapped[str] = mapped_column(String(1000000), nullable=True)
 
     word_ids: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
 
@@ -93,7 +93,7 @@ class Line(Base):
     # original line number in the subtitle file, so that we can align lines in two languages.
     original_line_number: Mapped[int] = mapped_column(Integer, nullable=False)
 
-    line_text: Mapped[str] = mapped_column(String(500), nullable=False)
+    line_text: Mapped[str] = mapped_column(String(50000), nullable=False)
     start_timestamp: Mapped[str] = mapped_column(String(100), nullable=False)
     end_timestamp: Mapped[str] = mapped_column(String(100), nullable=False)
     __table_args__ = (Index("idx_line_language", "language"),)
@@ -112,7 +112,7 @@ class Sentence(Base):
     # language should be simplified Chinese if before "§§§", English if after "§§§".
     language: Mapped[str] = mapped_column(String(50), nullable=False)
     line_ids: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
-    sentence_text: Mapped[str] = mapped_column(String(500), nullable=False)
+    sentence_text: Mapped[str] = mapped_column(String(50000), nullable=False)
 
     __table_args__ = (Index("idx_sentence_video_language", "video_id", "language"),)
 
@@ -220,24 +220,6 @@ class Families(Base):
     __table_args__ = (Index("idx_families_user_id", "user_id"),)
 
 
-# class Graph(Base):
-#     """
-#     Each user has a graph object.
-#     """
-#
-#     __tablename__ = "graph_model"
-#
-#     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-#     user_id: Mapped[int] = mapped_column(
-#         ForeignKey("user_model.id"), nullable=False, unique=True
-#     )
-#     families_id: Mapped[int] = mapped_column(
-#         ForeignKey("families_model.id"), nullable=True, unique=True
-#     )
-#     graph: Mapped[dict] = mapped_column(JSONB, nullable=True)
-#
-
-
 class Graph(Base):
     """
      Each user has a graph object.
@@ -252,7 +234,7 @@ class GraphNode(Base):
     __tablename__ = "graph_node"
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     graph_id: Mapped[int] = mapped_column(ForeignKey("graph_model.id"), nullable=False)
-    lemma: Mapped[str] = mapped_column(String(50), nullable=False)
+    lemma: Mapped[str] = mapped_column(String(50), nullable=False, unique=True, index=True)
     mastery: Mapped[float] = mapped_column(Float, nullable=False, default=0.5)
     word_ids: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
     acquired: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)

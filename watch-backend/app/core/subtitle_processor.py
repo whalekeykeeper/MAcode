@@ -1,16 +1,26 @@
+import asyncio
+import os
+import sys
+import time
 from dataclasses import dataclass
-from typing import List, Dict, Tuple, Optional
+from pathlib import Path
+from typing import Dict, List, Optional, Tuple
 from uuid import uuid4
 
 import spacy
 import webvtt
+from dotenv import load_dotenv
 from spacy.tokens import Token
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+from sqlalchemy.orm import sessionmaker
 
 from app.core.logger import logger
-from app.models import User, Video
-from utils.cefr_level_detector import detect_cefrj_level
+from app.core.utils.cefr_level_detector import detect_cefrj_level
+from app.models import Line, Sentence, User, Video, Word
+
+NLP_EN = spacy.load("en_core_web_lg")
+NLP_ZH = spacy.load("zh_core_web_lg")
 
 
 @dataclass
@@ -49,9 +59,7 @@ def analyze_text(
         - A collection of tokens where each token has:
           line_id, text, lemma, and pos.
     """
-    nlp_en = spacy.load("en_core_web_lg")
-    nlp_zh = spacy.load("zh_core_web_lg")
-    nlp = nlp_zh if language == "zh" else nlp_en
+    nlp = NLP_ZH if language == "zh" else NLP_EN
 
     # Different joining strategy for Chinese and English
     joined_text = "".join(lines_dict.values()) if language == "zh" else " ".join(lines_dict.values())
@@ -122,8 +130,6 @@ def analyze_text(
 
 class SubtitleProcessor:
     def __init__(self):
-        self.nlp_en = spacy.load("en_core_web_lg")
-        self.nlp_zh = spacy.load("zh_core_web_lg")
         self.new_video_stats = {"zh": {}, "en": {}}
 
     async def process_subtitles(
@@ -148,8 +154,9 @@ class SubtitleProcessor:
         logger.info(f"\nProcessing new video {ytb_id}...")
         # Parse the bilingual subtitle file into lines, full Chinese text, and full English text.
         subtitle_lines, full_zh_text, full_en_text = self._parse_subtitle_file(
-            video.vtt_path
+            str(video.vtt_path)
         )
+        logger.info(f"Successfully parsed subtitle file for video {ytb_id}")
 
         # Create lines (word_ids are empty for now) and return a mapping.
         lines_dict_bi = await self._create_line_entries(subtitle_lines, video.id, session)
@@ -245,12 +252,12 @@ class SubtitleProcessor:
             full_en_text: Full English text.
         """
         logger.info(f"\nAttempting to read subtitle file: {subtitle_path}")
-        if not Path(subtitle_path).exists():
+        if not subtitle_path:
             logger.error(f"Subtitle file {subtitle_path} does not exist.")
             raise FileNotFoundError(
                 f"The subtitle file at {subtitle_path} does not exist."
             )
-        logger.info(f"File exists: {Path(subtitle_path).exists()}")
+        logger.info(f"File exists: {subtitle_path}")
 
         subtitle_lines = []
         zh_texts = []
@@ -274,7 +281,7 @@ class SubtitleProcessor:
                     # TODO: for Chinese subtitles that the line which contains "翻译人员" and/or "校对人员" in TED Talks' videos
                     # are normally not punctuated. If the last character is not a punctuation in Chinese,
                     # add a period for now and this should be improved in the future.
-                    if ("翻译人员" in zh_text or "校对人员" in zh_text) and not self.nlp_zh(
+                    if ("翻译人员" in zh_text or "校对人员" in zh_text) and not NLP_ZH(
                             zh_text
                     )[-1].is_punct:
                         zh_text += "。"
@@ -394,18 +401,22 @@ class SubtitleProcessor:
                 if language == "en"
                 else ""
             )
-
-            # Create word object
-            word = Word(
-                language=language,
-                word=token_data["text"],
-                lemma=token_data["lemma"],
-                pos=token_data["pos"],
-                line_id=token_data["line_id"],
-                video_id=video_id,
-                cefr=cefr,
-                vector=token_data.get("vector", None),
-            )
+            word_vector = token_data.get("vector", None)
+            if word_vector is not None:
+                # Create word object
+                word = Word(
+                    language=language,
+                    word=token_data["text"],
+                    lemma=token_data["lemma"],
+                    pos=token_data["pos"],
+                    line_id=token_data["line_id"],
+                    video_id=video_id,
+                    cefr=cefr,
+                    vector=word_vector,
+                )
+            else:
+                logger.debug(
+                    f"Word '{token_data['text']}' has no vector. Therefore, it is not collected into the database.")
             session.add(word)
         if language == "zh":
             self.new_video_stats["zh"]["new_words"] = len(token_collection)
@@ -416,7 +427,8 @@ class SubtitleProcessor:
         await session.flush()
         await session.commit()
 
-    async def stats_for_subtitles(self, session: AsyncSession, user_id: int) -> dict:
+    @staticmethod
+    async def stats_for_subtitles(session: AsyncSession, user_id: int) -> dict:
         """
         Generate statistics about subtitles, words, and families for a user, differentiating between "en" and "zh".
 
@@ -466,8 +478,8 @@ class SubtitleProcessor:
         word_freq_en = {}
         for word in words_en:
             key = (word.lemma, word.pos)
-            if (not self.nlp_en.vocab[word.lemma].is_stop) and word.pos in ["NOUN", "VERB", "ADJ", "ADV",
-                                                                            "PROPN", "INTJ"]:
+            if (not NLP_EN.vocab[word.lemma].is_stop) and word.pos in ["NOUN", "VERB", "ADJ", "ADV",
+                                                                       "PROPN", "INTJ"]:
                 word_freq_en[key] = word_freq_en.get(key, 0) + 1
 
         sorted_word_freq_en = sorted(word_freq_en.items(), key=lambda x: -x[1])
@@ -477,24 +489,12 @@ class SubtitleProcessor:
 
 
 if __name__ == "__main__":
-    import os
-    import sys
-    import time
-    from pathlib import Path
-
-    from dotenv import load_dotenv
 
     # Add project root to Python path BEFORE any app imports
     project_root = str(Path(__file__).parent.parent.parent)
     sys.path.append(project_root)
 
     # Now we can import app modules
-    import asyncio
-
-    from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
-    from sqlalchemy.orm import sessionmaker
-
-    from app.models import Line, Sentence, User, Video, Word
 
     # Load environment variables
     load_dotenv()
@@ -667,9 +667,8 @@ if __name__ == "__main__":
                 words = (await session.execute(stmt)).scalars().all()
                 lemmas = set()
                 lemma_pos_pairs = set()
-                nlp_en = spacy.load("en_core_web_lg")
                 for word in words:
-                    if (not nlp_en.vocab[word.lemma].is_stop) and word.pos in ["NOUN", "VERB", "ADJ", "ADV",
+                    if (not NLP_EN.vocab[word.lemma].is_stop) and word.pos in ["NOUN", "VERB", "ADJ", "ADV",
                                                                                "PROPN", "INTJ"]:
                         lemmas.add(word.lemma)
                         lemma_pos_pairs.add((word.lemma, word.pos))
