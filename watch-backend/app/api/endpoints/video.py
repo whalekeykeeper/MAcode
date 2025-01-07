@@ -43,11 +43,13 @@ async def download_and_process_video_and_subtitles(
     logger.debug(f"Request body: {new_video}")
     start_time = time.time()  # Record start time
 
-    url = new_video.video_url
-    ytb_id = get_ytb_id(url)
-    static_folder = Path(__file__).parent.parent.parent.parent / "static"
-
     try:
+
+
+        url = new_video.video_url
+        ytb_id = get_ytb_id(url)
+        static_folder = Path(__file__).parent.parent.parent.parent / "static"
+
         # Check if ytb_id already in the database.
         existing_video = await _get_existing_video(ytb_id, session)
 
@@ -70,18 +72,14 @@ async def download_and_process_video_and_subtitles(
             await session.commit()
             return new_video
 
-    except HTTPException:
-        await session.rollback()
-        raise
     except Exception as e:
+        logger.error(f"Transaction failed: {str(e)}")
         await session.rollback()
-        raise HTTPException(
-            status_code=500, detail=f"Failed to process video request: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Failed to process video request: {str(e)}")
     finally:
         end_time = time.time()  # Record end time
         elapsed_time = end_time - start_time
-        logger.info(f"Runtime of the function: {elapsed_time:.2f} seconds")
+        logger.info(f"Elapsed time: {elapsed_time:.2f} seconds")
 
 
 async def _get_existing_video(ytb_id: str, session: AsyncSession) -> Optional[Video]:
