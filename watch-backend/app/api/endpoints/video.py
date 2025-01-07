@@ -45,7 +45,6 @@ async def download_and_process_video_and_subtitles(
 
     try:
 
-
         url = new_video.video_url
         ytb_id = get_ytb_id(url)
         static_folder = Path(__file__).parent.parent.parent.parent / "static"
@@ -402,10 +401,14 @@ async def _initiate_graph(user_id: int, session: AsyncSession,
         logger.info(f"No families found for user {user_id}.")
         return
 
+    # List of vectors, either with all the words' vectors and a mapping,
+    # or with the mean vector of each family members
+    vectors = []
+    # A list to collect vectors for each family
     vectors_list = []
-    if similarity_threshold == 0.0:
-        # Flatten vectors and map them to families
-        relation = defaultdict(list)
+    # Flatten vectors and map them to families
+    relation = defaultdict(list)
+    if similarity_threshold != 0.0:
         for family in families:
             for word_id in family.word_ids:
                 result = await session.execute(select(Word).where(Word.id == word_id))
@@ -414,28 +417,29 @@ async def _initiate_graph(user_id: int, session: AsyncSession,
                     relation[family.lemma].append(len(vectors_list))
                     vectors_list.append(word.vector)
                 else:
-                    logger.info(f"Word {word.lemma} has no vector.")
+                    # The following warning should never appear since we have already filtered out words without
+                    # vectors when initiating/updating the vocabulary
+                    logger.warning(f"Word {word.lemma} has no vector.")
+        vectors = np.array(vectors_list)
     else:
         for family in families:
-            word_vectors = []
             for word_id in family.word_ids:
                 result = await session.execute(select(Word).where(Word.id == word_id))
                 word = result.scalar_one()
                 if word.vector is not None:
-                    word_vectors.append(word.vector)
+                    vectors_list.append(word.vector)
                 else:
                     logger.info(f"Word {word.lemma} has no vector.")
             # Compute the mean of the word vectors for the family
-            if word_vectors:
-                vectors_list.append(np.mean(word_vectors, axis=0))
+            if vectors_list:
+                vectors.append(np.mean(vectors_list, axis=0))
             else:
+                # The following warning should never appear
                 logger.warning(f"Family {family.lemma} has no valid word vectors and will be skipped.")
-    # Convert list to NumPy array after collecting all vectors
-    if not vectors_list:
-        logger.error(f"No valid vectors found for user {user_id}. Cannot build graph.")
+    if not vectors:
+        logger.error("No valid vectors found for any family. Please check.")
         return
-    vectors = np.array(vectors_list)
-
+    
     # Normalize vectors and compute similarity matrix
     norms = np.linalg.norm(vectors, axis=1)
     if np.any(norms == 0):
