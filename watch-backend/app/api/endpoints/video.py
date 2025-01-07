@@ -1,6 +1,5 @@
 # /app/api/endpoints/video.py
 
-import itertools
 import time
 from collections import defaultdict
 from pathlib import Path
@@ -231,7 +230,8 @@ async def initiate_or_update_vocabulary(session: AsyncSession, user: User, video
         for word_id in video_word_ids:
             stmt = select(Word).where(Word.id == word_id)
             word = (await session.execute(stmt)).scalar_one_or_none()
-            if word and word.language == "en" and not NLP_EN.vocab[str(word.lemma)].is_stop and word.lemma in VALID_POS:
+            if (word and word.language == "en" and not NLP_EN.vocab[str(word.lemma)].is_stop and word.lemma in
+                    VALID_POS and not NLP_EN.vocab[str(word.lemma)].is_punct):
                 key = f"{word.lemma};{word.pos}"
                 if key not in vocabulary_dict:
                     vocabulary_dict[key] = []
@@ -281,17 +281,18 @@ async def _initiate_vocabulary(user_id: int, session: AsyncSession) -> Dict[str,
     # Filter words: remove stop words and keep only certain POS
     filtered_words = [
         word for word in words
-        if ((word.language == "en" and not NLP_EN.vocab[word.lemma].is_stop
-             and word.pos in VALID_POS))
+        if (word.language == "en" and not NLP_EN.vocab[word.lemma].is_stop
+            and word.pos in VALID_POS and not NLP_EN.vocab[word.lemma].is_punct)
     ]
 
     # Create dictionary with lemma+pos as key, a list of (id, lemma) as value
     vocabulary_dict: Dict[str, List[List[Union[int, str]]]] = {}
     for word in filtered_words:
-        key = f"{word.lemma};{word.pos}"
-        if key not in vocabulary_dict:
-            vocabulary_dict[key] = []
-        vocabulary_dict[key].append([word.id, word.lemma])
+        if word:
+            key = f"{word.lemma};{word.pos}"
+            if key not in vocabulary_dict:
+                vocabulary_dict[key] = []
+            vocabulary_dict[key].append([word.id, word.lemma])
 
     # Create vocabulary entry and update User table
     vocabulary_entry = Vocabulary(
@@ -392,12 +393,13 @@ async def _initiate_graph(user_id: int, session: AsyncSession,
     Returns:
         None: The graph is stored in the database.
     """
-    # Retrieve all families for the user
     logger.info(f"-----Building graph for user {user_id} with similarity_threshold {similarity_threshold}...")
+
+    # Retrieve all families for the user
     stmt = select(Families).where(Families.user_id == user_id)
     families = (await session.execute(stmt)).scalars().all()
 
-    if not families:
+    if len(families) == 0:
         logger.info(f"No families found for user {user_id}.")
         return
 
@@ -436,90 +438,99 @@ async def _initiate_graph(user_id: int, session: AsyncSession,
             else:
                 # The following warning should never appear
                 logger.warning(f"Family {family.lemma} has no valid word vectors and will be skipped.")
-    if not vectors:
+    if vectors.size == 0:
         logger.error("No valid vectors found for any family. Please check.")
         return
-    
+    logger.debug(f"families shape: {len(families)}")
+    logger.debug(f"vectors shape: {vectors.shape}")
+
+    logger.info(f"Computing similarity.")
     # Normalize vectors and compute similarity matrix
     norms = np.linalg.norm(vectors, axis=1)
-    if np.any(norms == 0):
+    if np.any(norms == 0):  # Explicitly handle zero-norm vectors
         logger.error("Encountered zero norm vector during normalization.")
         return
 
     normalized_vectors = vectors / norms[:, np.newaxis]
     similarity_matrix = np.dot(normalized_vectors, normalized_vectors.T)
 
-    # Build adjacency list with degree restriction (max 5 edges per family)
-    weighted_adj_list = []
-    degree = defaultdict(int)  # Track the degree of each node
+    logger.debug("Shape of vectors {}".format(vectors.shape))
+    logger.debug("Shape of norms {}".format(norms.shape))
+    logger.debug(
+        "Shape of sim matrix {}".format(similarity_matrix.shape))
 
-    if similarity_threshold == 0.0:
-        family_names = [family.lemma for family in families]
-        relatives = {}
-
-        for i, f1 in enumerate(family_names):
-            buffer = []
-            for f2 in family_names[i + 1:]:
-                pairs = list(itertools.product(relation[f1], relation[f2]))
-                for x, y in pairs:
-                    if x >= len(similarity_matrix) or y >= len(similarity_matrix):
-                        logger.warning(f"Skipping out-of-bounds index: x={x}, y={y}")
-                        continue
-                score = max(similarity_matrix[x][y] for x, y in pairs)
-                if score > 0.3:
-                    buffer.append((f1, f2, min(1.0, score)))
-            relatives[f1] = sorted(buffer, key=lambda x: -x[2])
-
-        # Restrict edges to max degree of 5
-        for f, edges in relatives.items():
-            for e in edges:
-                if degree[e[0]] < 5 and degree[e[1]] < 5:
-                    weighted_adj_list.append(e)
-                    degree[e[0]] += 1
-                    degree[e[1]] += 1
-                else:
-                    break
-    else:
-        families_list = [family.lemma for family in families]
-        num_families = len(families_list)
-        for i, f1 in enumerate(families_list):
-            buffer = []
-            for offset, f2 in enumerate(families_list[i + 1:]):
-                logger.debug(f"Processing similarity_matrix[{i}][{offset}]")
-                j = i + offset + 1  # Adjust index offset
-
-                if j >= num_families:
-                    logger.error(f"Index out of bounds: j={j}, num_families={num_families}")
-                    continue
-                if similarity_matrix[i][j] > similarity_threshold:
-                    buffer.append((f1, f2, similarity_matrix[i][j]))
-            buffer = sorted(buffer, key=lambda x: -x[2])  # Sort edges by weight
-
-            # Add edges with degree restriction
-            for edge in buffer:
-                if degree[edge[0]] < 5 and degree[edge[1]] < 5:
-                    weighted_adj_list.append(edge)
-                    degree[edge[0]] += 1
-                    degree[edge[1]] += 1
-                else:
-                    break
+    # # Build adjacency list with degree restriction (max 5 edges per family)
+    # weighted_adj_list = []
+    # degree = defaultdict(int)  # Track the degree of each node
+    #
+    # if similarity_threshold == 0.0:
+    #     family_names = [family.lemma for family in families]
+    #     relatives = {}
+    #
+    #     for i, f1 in enumerate(family_names):
+    #         buffer = []
+    #         for f2 in family_names[i + 1:]:
+    #             pairs = list(itertools.product(relation[f1], relation[f2]))
+    #             for x, y in pairs:
+    #                 if x >= len(similarity_matrix) or y >= len(similarity_matrix):
+    #                     logger.warning(f"Skipping out-of-bounds index: x={x}, y={y}")
+    #                     continue
+    #             score = max(similarity_matrix[x][y] for x, y in pairs)
+    #             if score > 0.3:
+    #                 buffer.append((f1, f2, min(1.0, score)))
+    #         relatives[f1] = sorted(buffer, key=lambda x: -x[2])
+    #
+    #     # Restrict edges to max degree of 5
+    #     for f, edges in relatives.items():
+    #         for e in edges:
+    #             if degree[e[0]] < 5 and degree[e[1]] < 5:
+    #                 weighted_adj_list.append(e)
+    #                 degree[e[0]] += 1
+    #                 degree[e[1]] += 1
+    #             else:
+    #                 break
+    # else:
+    #     families_list = [family.lemma for family in families]
+    #     num_families = len(families_list)
+    #     for i, f1 in enumerate(families_list):
+    #         buffer = []
+    #         for offset, f2 in enumerate(families_list[i + 1:]):
+    #             logger.debug(f"Processing similarity_matrix[{i}][{offset}]")
+    #             j = i + offset + 1  # Adjust index offset
+    #
+    #             if j >= num_families:
+    #                 logger.error(f"Index out of bounds: j={j}, num_families={num_families}")
+    #                 continue
+    #             if similarity_matrix[i][j] > similarity_threshold:
+    #                 buffer.append((f1, f2, similarity_matrix[i][j]))
+    #         buffer = sorted(buffer, key=lambda x: -x[2])  # Sort edges by weight
+    #
+    #         # Add edges with degree restriction
+    #         for edge in buffer:
+    #             if degree[edge[0]] < 5 and degree[edge[1]] < 5:
+    #                 weighted_adj_list.append(edge)
+    #                 degree[edge[0]] += 1
+    #                 degree[edge[1]] += 1
+    #             else:
+    #                 break
 
     # Build the graph using networkx
     graph = nx.Graph()
     graph.add_nodes_from([family.lemma for family in families])
-    graph.add_weighted_edges_from(weighted_adj_list)
-    nx.set_node_attributes(graph, 0.5, "mastery")
+    # graph.add_weighted_edges_from(weighted_adj_list)
+    # nx.set_node_attributes(graph, 0.5, "mastery")
+    nodes = sorted(graph.nodes(), key=str)
+    logger.info(f"Print all the nodes: {nodes}")
 
-    # Convert the graph to a serializable format
-    graph_data = nx.node_link_data(graph)
+    # # Convert the graph to a serializable format
+    # graph_data = nx.node_link_data(graph)
+    # # Save the graph in the database
+    # graph_entry = Graph(user_id=user_id)
+    # session.add(graph_entry)
+    # await session.flush()
+    # await session.commit()
 
-    # Save the graph in the database
-    graph_entry = Graph(user_id=user_id)
-    session.add(graph_entry)
-    await session.flush()
-    await session.commit()
-
-    logger.info(f"Graph for user {user_id} built and stored in the database.")
+    # logger.info(f"Graph for user {user_id} built and stored in the database.")
 
 
 async def _update_graph(user_id: int, session: AsyncSession) -> None:
