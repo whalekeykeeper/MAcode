@@ -38,6 +38,7 @@ def download_video_and_subtitles(
     """
     A function to download YouTube video and subtitles.
     """
+    logger.debug(f"-----Downloading video and subtitles for video: {ytb_id}")
     if not video_offered_with_zh_en_subtitles(ytb_id):
         raise HTTPException(
             status_code=400,
