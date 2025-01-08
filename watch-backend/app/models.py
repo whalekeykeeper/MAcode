@@ -16,7 +16,7 @@
 
 from datetime import datetime
 from uuid import uuid4
-
+from sqlalchemy import UniqueConstraint
 from sqlalchemy import (
     JSON,
     Boolean,
@@ -234,10 +234,15 @@ class GraphNode(Base):
     __tablename__ = "graph_node"
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     graph_id: Mapped[int] = mapped_column(ForeignKey("graph_model.id"), nullable=False)
-    lemma: Mapped[str] = mapped_column(String(50), nullable=False, unique=True, index=True)
+    lemma: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
     mastery: Mapped[float] = mapped_column(Float, nullable=False, default=0.5)
     word_ids: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
     acquired: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+
+    __table_args__ = (
+        # Make lemma unique within a graph
+        UniqueConstraint('graph_id', 'lemma', name='unique_lemma_per_graph'),
+    )
 
 
 class GraphEdge(Base):
