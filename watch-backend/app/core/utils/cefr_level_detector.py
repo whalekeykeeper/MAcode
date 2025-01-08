@@ -5,8 +5,6 @@ from pathlib import Path
 
 import pandas as pd
 
-from app.core.logger import logger
-
 """
 Fine-grained part-of-speech. See: https://spacy.io/api/token#attributes
 """
@@ -179,7 +177,7 @@ def detect_cefrj_level(text: str, pos: str, pos_or_tag: str) -> str:
     default_cefr_path = (
             Path(__file__).parent.parent.parent / "resources/CEFR_combined_data.csv"
     )
-    
+
     cefr_data = pd.read_csv(default_cefr_path)
 
     aligned_pos = (
@@ -193,9 +191,9 @@ def detect_cefrj_level(text: str, pos: str, pos_or_tag: str) -> str:
         if not matching_row.empty:
             return matching_row.iloc[0]["CEFR"]
 
-    logger.debug(
-        f"Cannot find CEFR_J level for word {text} with pos {aligned_pos} in spacy token.{pos_or_tag}_."
-    )
+    # logger.debug(
+    #     f"Cannot find CEFR_J level for word {text} with pos {aligned_pos} in spacy token.{pos_or_tag}_."
+    # )
     return ""
 
 
