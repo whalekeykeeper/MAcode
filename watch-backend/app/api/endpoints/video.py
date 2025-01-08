@@ -1,5 +1,6 @@
 # /app/api/endpoints/video.py
 
+import itertools
 import time
 from collections import defaultdict
 from pathlib import Path
@@ -12,6 +13,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException
 from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
+from tqdm import tqdm
 
 from app.api import deps
 from app.core.bilingual_subtitle_creator import create_bilingual_vtt
@@ -43,7 +45,6 @@ async def download_and_process_video_and_subtitles(
     start_time = time.time()  # Record start time
 
     try:
-
         url = new_video.video_url
         ytb_id = get_ytb_id(url)
         static_folder = Path(__file__).parent.parent.parent.parent / "static"
@@ -380,7 +381,7 @@ async def _update_family_with_new_words(
 
 
 async def _initiate_graph(user_id: int, session: AsyncSession,
-                          similarity_threshold: float = 0.3) -> None:
+                          similarity_threshold: float = 0.3, k: int = 5) -> None:
     """
     Build a graph connecting families based on vector similarity.
     similarity_threshold has a default value of 0.30.
@@ -459,68 +460,61 @@ async def _initiate_graph(user_id: int, session: AsyncSession,
     logger.debug(
         "Shape of sim matrix {}".format(similarity_matrix.shape))
 
-    # # Build adjacency list with degree restriction (max 5 edges per family)
-    # weighted_adj_list = []
-    # degree = defaultdict(int)  # Track the degree of each node
-    #
-    # if similarity_threshold == 0.0:
-    #     family_names = [family.lemma for family in families]
-    #     relatives = {}
-    #
-    #     for i, f1 in enumerate(family_names):
-    #         buffer = []
-    #         for f2 in family_names[i + 1:]:
-    #             pairs = list(itertools.product(relation[f1], relation[f2]))
-    #             for x, y in pairs:
-    #                 if x >= len(similarity_matrix) or y >= len(similarity_matrix):
-    #                     logger.warning(f"Skipping out-of-bounds index: x={x}, y={y}")
-    #                     continue
-    #             score = max(similarity_matrix[x][y] for x, y in pairs)
-    #             if score > 0.3:
-    #                 buffer.append((f1, f2, min(1.0, score)))
-    #         relatives[f1] = sorted(buffer, key=lambda x: -x[2])
-    #
-    #     # Restrict edges to max degree of 5
-    #     for f, edges in relatives.items():
-    #         for e in edges:
-    #             if degree[e[0]] < 5 and degree[e[1]] < 5:
-    #                 weighted_adj_list.append(e)
-    #                 degree[e[0]] += 1
-    #                 degree[e[1]] += 1
-    #             else:
-    #                 break
-    # else:
-    #     families_list = [family.lemma for family in families]
-    #     num_families = len(families_list)
-    #     for i, f1 in enumerate(families_list):
-    #         buffer = []
-    #         for offset, f2 in enumerate(families_list[i + 1:]):
-    #             logger.debug(f"Processing similarity_matrix[{i}][{offset}]")
-    #             j = i + offset + 1  # Adjust index offset
-    #
-    #             if j >= num_families:
-    #                 logger.error(f"Index out of bounds: j={j}, num_families={num_families}")
-    #                 continue
-    #             if similarity_matrix[i][j] > similarity_threshold:
-    #                 buffer.append((f1, f2, similarity_matrix[i][j]))
-    #         buffer = sorted(buffer, key=lambda x: -x[2])  # Sort edges by weight
-    #
-    #         # Add edges with degree restriction
-    #         for edge in buffer:
-    #             if degree[edge[0]] < 5 and degree[edge[1]] < 5:
-    #                 weighted_adj_list.append(edge)
-    #                 degree[edge[0]] += 1
-    #                 degree[edge[1]] += 1
-    #             else:
-    #                 break
+    # Build adjacency list with degree restriction (max 5 edges per family)
+    weighted_adj_list = []
+    degree = defaultdict(int)  # Track the degree of each node
+
+    if similarity_threshold != 0.0:  # If there is a meaningful similarity threshold (which is not 0.0)
+        logger.info(f"Similarity threshold set to {similarity_threshold}. Adding edges with similarity above "
+                    f"threshold. And restricting edges to max degree of 5.")
+        family_names = [family.lemma for family in families]
+        relatives = {}
+
+        for i, f1 in enumerate(family_names):
+            buffer = []
+            for f2 in family_names[i + 1:]:
+                if f1 == f2:
+                    continue
+                pairs = list(itertools.product(relation[f1], relation[f2]))
+                for x, y in pairs:
+                    if x >= len(similarity_matrix) or y >= len(similarity_matrix):
+                        logger.warning(f"Skipping out-of-bounds index: x={x}, y={y}")
+                        continue
+                score = max(similarity_matrix[x][y] for x, y in pairs)
+                if score > 0.3:
+                    buffer.append((f1, f2, min(1.0, score)))
+            relatives[f1] = sorted(buffer, key=lambda x: -x[2])
+
+        # Restrict edges to max degree of 5
+        for f, edges in relatives.items():
+            for e in edges:
+                if degree[e[0]] < k and degree[e[1]] < k:
+                    weighted_adj_list.append(e)
+                    degree[e[0]] += 1
+                    degree[e[1]] += 1
+                else:
+                    break
+    else:
+        logger.info("No similarity threshold set. Adding all edges.")
+        # Add all the edges
+        families_list = [family.lemma for family in families]
+        num_families = len(families_list)
+        for i, f1 in tqdm(enumerate(families_list), total=num_families):
+            for j, f2 in enumerate(families_list[i:]):
+                j += i
+                if f1 == f2:
+                    continue
+                if similarity_matrix[i][j] > similarity_threshold:
+                    weighted_adj_list.append((f1, f2, similarity_matrix[i][j]))
 
     # Build the graph using networkx
     graph = nx.Graph()
     graph.add_nodes_from([family.lemma for family in families])
-    # graph.add_weighted_edges_from(weighted_adj_list)
-    # nx.set_node_attributes(graph, 0.5, "mastery")
+    graph.add_weighted_edges_from(weighted_adj_list)
+    logger.debug(f"Graph has {graph.number_of_nodes()} nodes and {graph.number_of_edges()} edges.")
+    nx.set_node_attributes(graph, 0.5, "mastery")
     nodes = sorted(graph.nodes(), key=str)
-    logger.info(f"Print all the nodes: {nodes}")
+    logger.debug(f"Print all the nodes: {nodes}")
 
     # # Convert the graph to a serializable format
     # graph_data = nx.node_link_data(graph)
