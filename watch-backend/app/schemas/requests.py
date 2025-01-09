@@ -16,16 +16,15 @@ class UserRequest(BaseRequest):
     uuid: str  # the user's uuid from localStorage if exists, else null
 
 
-class VideoRequest(BaseRequest):
-    uuid: str
+class VideoRequest(BaseModel):
     video_url: str
+    uuid: str
 
 
 class TranslationRequest(BaseRequest):
     uuid: str
     word: str
     sentence: str
-
 
 # class StatisticsRequest(BaseRequest):
 #     uuid: str

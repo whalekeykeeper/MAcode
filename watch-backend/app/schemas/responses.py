@@ -26,7 +26,7 @@ class VideoResponse(BaseResponse):
     url: str
     video_path: str
     vtt_path: str
-
+    uuid: str
 
 # class TranslationResponse(BaseResponse):
 #     id: int

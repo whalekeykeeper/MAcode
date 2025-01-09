@@ -36,7 +36,7 @@ async def download_and_process_video_and_subtitles(
         new_video: VideoRequest,
         session: AsyncSession = Depends(deps.get_session),
         current_user: User = Depends(deps.get_current_user),
-        x_user_uuid: Optional[str] = Header(None)
+        uuid: str = Header(...),
 ):
     """
     Process a video request and handle subtitle generation.
@@ -49,10 +49,15 @@ async def download_and_process_video_and_subtitles(
     Returns:
         VideoResponse: The processed video information
     """
-    logger.debug(f"Request received with headers: {x_user_uuid} and body: {new_video}")
+    logger.debug(f"Request received with headers: {uuid} and body: {new_video}")
     start_time = time.time()
 
+    user = db_session.query(User).filter(User.uuid == uuid).first()
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid user")
+
     try:
+
         url = new_video.video_url
         ytb_id = get_ytb_id(url)
         static_folder = Path(__file__).parent.parent.parent.parent / "static"
@@ -539,8 +544,8 @@ async def _compute_similarity_matrix(vectors):
     logger.debug("Shape of norms {}".format(norms.shape))
     logger.debug(f"Similarity matrix shape: {similarity_matrix.shape}")
     return similarity_matrix
-    
-   
+
+
 async def _build_adjacency_list(families, relation, similarity_matrix, similarity_threshold, k):
     weighted_adj_list = []
     degree = defaultdict(int)
@@ -590,6 +595,7 @@ async def _build_adjacency_list(families, relation, similarity_matrix, similarit
     # nx.set_node_attributes(graph, 0.5, "mastery")
     # nodes = sorted(graph.nodes(), key=str)
     # logger.debug(f"Print all the nodes: {nodes}")
+
 
 async def _create_edges_in_db(session, graph_entry, nodes_dict, weighted_adj_list):
     count = 0
@@ -688,7 +694,8 @@ async def _update_graph(
 
     similarity_matrix = await _compute_similarity_matrix(vectors)
 
-    weighted_adj_list = await _build_adjacency_list(current_families.values(), relation, similarity_matrix, similarity_threshold, k)
+    weighted_adj_list = await _build_adjacency_list(current_families.values(), relation, similarity_matrix,
+                                                    similarity_threshold, k)
 
     await _create_edges_in_db(session, graph_entry, nodes_dict, weighted_adj_list)
 

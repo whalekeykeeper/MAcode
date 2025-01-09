@@ -21,10 +21,10 @@ async def get_or_create_user(
     2. UUID exists and matches an entry in the database: Return the user.
     3. UUID exists but does not match any entry: Raise an error.
     """
-    user_uuid = user_request.uuid
+    uuid = user_request.uuid
 
     async with session.begin():
-        if user_uuid is None:
+        if uuid is None:
             # Case 1: UUID is None, create a new user
             new_user = User()  # UUID will be generated automatically
             session.add(new_user)
@@ -33,7 +33,7 @@ async def get_or_create_user(
             return UserResponse(uuid=new_user.uuid, exists=False)
 
         # Case 2 & 3: UUID is provided
-        stmt = select(User).where(User.uuid == user_uuid)
+        stmt = select(User).where(User.uuid == uuid)
         user = (await session.execute(stmt)).scalars().first()
 
         if user:
