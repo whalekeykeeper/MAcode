@@ -25,6 +25,7 @@ from app.schemas.responses import VideoResponse
 
 router = APIRouter()
 
+# Load language models
 NLP_EN = spacy.load("en_core_web_lg")
 NLP_ZH = spacy.load("zh_core_web_lg")
 VALID_POS = ["NOUN", "VERB", "ADJ", "ADV", "PROPN", "INTJ"]
@@ -48,34 +49,29 @@ async def download_and_process_video_and_subtitles(
     Returns:
         VideoResponse: The processed video information
     """
-    logger.debug(f"Request received")
-    logger.debug(f"Headers: {x_user_uuid}")
-    logger.debug(f"Request body: {new_video}")
-    start_time = time.time()  # Record start time
+    logger.debug(f"Request received with headers: {x_user_uuid} and body: {new_video}")
+    start_time = time.time()
 
     try:
         url = new_video.video_url
         ytb_id = get_ytb_id(url)
         static_folder = Path(__file__).parent.parent.parent.parent / "static"
 
-        # Check if ytb_id already in the database.
         existing_video = await _get_existing_video(ytb_id, session)
 
-        if existing_video:  # If video already exists in the database
+        if existing_video:
             logger.info(f"Video {ytb_id} already exists in the database.")
             await _ensure_bilingual_subtitles(existing_video, static_folder, session)
             if await current_user_has_watched(current_user.id, existing_video.id, session):
-                # If the user has already watched the video, do nothing, just return the video.
                 logger.info(f"User {current_user.id} has already watched video {existing_video.id}.")
                 return existing_video
-            # If the user hasn't watched the video, process the video for the user.
             await _process_existed_video_for_new_user(current_user, existing_video.id, session)
-            logger.info(f"Start to process existed video {ytb_id} for user {current_user.id}.")
+            logger.info(f"Processed existing video {ytb_id} for user {current_user.id}.")
             await session.commit()
             return existing_video
 
         else:
-            logger.info(f"Video {ytb_id} does not exist in the database. Start to process its subtitle.")
+            logger.info(f"Video {ytb_id} does not exist in the database. Processing subtitles.")
             new_video = await _process_new_video(url, ytb_id, static_folder, current_user, session)
             await session.commit()
             return new_video
@@ -85,8 +81,7 @@ async def download_and_process_video_and_subtitles(
         await session.rollback()
         raise HTTPException(status_code=500, detail=f"Failed to process video request: {str(e)}")
     finally:
-        end_time = time.time()  # Record end time
-        elapsed_time = end_time - start_time
+        elapsed_time = time.time() - start_time
         logger.info(f"Elapsed time: {elapsed_time:.2f} seconds")
 
 
@@ -121,9 +116,7 @@ async def _ensure_bilingual_subtitles(
     if not bilingual_vtt_path.exists():
         video.vtt_path = create_bilingual_vtt(video.ytb_id, static_folder)
         session.add(video)
-        logger.info(
-            f"Bilingual subtitles created for video {video.ytb_id}. Check why the bilingual subtitle is not created."
-        )
+        logger.info(f"Bilingual subtitles created for video {video.ytb_id}.")
 
 
 async def current_user_has_watched(
@@ -162,14 +155,11 @@ async def _process_existed_video_for_new_user(
         video_id: ID of the video to process
         session: Database session
     """
-
-    # Fetch video_word_ids from Video
     stmt = select(Video.word_ids).where(Video.id == video_id)
     video_word_ids = (await session.execute(stmt)).scalar_one_or_none()
 
     if video_word_ids:
         await process_user_specific_data(session, user, video_id, video_word_ids)
-
     else:
         logger.error(f"word_list of video {video_id} not found for user {user.id}")
         raise HTTPException(status_code=404, detail=f"word_list of video {video_id} not found for user {user.id}")
@@ -186,14 +176,10 @@ async def _process_new_video(
 ) -> Video:
     """Download and process new video."""
     try:
-        from pathlib import Path
-        # Download video and create subtitles
         download_video_and_subtitles(ytb_id, url, static_folder)
         bilingual_vtt_path = create_bilingual_vtt(ytb_id, static_folder)
 
         logger.debug(f"Video {ytb_id} downloaded and bilingual subtitles created.")
-        logger.debug(f"Start to process new video {ytb_id} for user {user.id}.")
-        # Create video entry, mainly for generating id.
         new_video = Video(
             url=url,
             ytb_id=ytb_id,
@@ -203,8 +189,6 @@ async def _process_new_video(
         session.add(new_video)
         await session.flush()
 
-        logger.debug(f"Video {ytb_id} created in the database.")
-        # Process subtitles for all tables for new videos
         subtitle_processor = SubtitleProcessor()
         await subtitle_processor.process_subtitles(
             ytb_id=new_video.ytb_id,
@@ -215,9 +199,7 @@ async def _process_new_video(
 
         stmt = select(Video.word_ids).where(Video.id == new_video.id)
         video_word_ids = (await session.execute(stmt)).scalar_one_or_none()
-        logger.debug(f"Video {ytb_id} processed for user {user.id}.")
         if video_word_ids:
-            logger.info(f"-----Start to process user-specific data for user {user.id}.")
             await process_user_specific_data(session, user, new_video.id, video_word_ids)
         else:
             logger.error(f"word_list of video {new_video.id} not found for user {user.id}")
@@ -257,14 +239,13 @@ async def process_user_specific_data(
         video_id: ID of the processed video
         video_word_ids: List of word IDs from the video
     """
-    logger.info(f"------Processing vocabulary, family, graph for user {user.id}...")
+    logger.info(f"Processing vocabulary, family, graph for user {user.id}...")
     user.video_ids = list(set(user.video_ids + [video_id]))
     user.word_ids = list(set(user.word_ids + video_word_ids))
     session.add(user)
     await session.flush()
     new_words = await initiate_or_update_vocabulary(session, user, video_word_ids)
 
-    # Check if user has entries in Families table, if not, initiate it, else update it
     stmt = select(Families).where(Families.user_id == user.id)
     families = (await session.execute(stmt)).scalars().all()
     if families:
@@ -272,13 +253,11 @@ async def process_user_specific_data(
     else:
         await _initiate_families(user.id, session)
 
-    # Check if user has entries in Graph table, if not, initiate it, else update it
     stmt = select(Graph).where(Graph.user_id == user.id)
     graph = (await session.execute(stmt)).scalar_one_or_none()
     if graph:
         await _update_graph(user.id, session)
     else:
-        # Update Graph table
         await _initiate_graph(user.id, session)
 
     logger.info(f"Processed vocabulary, family, graph for user {user.id}.")
@@ -286,13 +265,11 @@ async def process_user_specific_data(
 
 async def initiate_or_update_vocabulary(session: AsyncSession, user: User, video_word_ids: List[int]) \
         -> Dict[str, List[List[Union[int, str]]]]:
-    logger.info(f"------Initiating or updating vocabulary for user {user.id}...")
-    # Check if current user has Vocabulary, if not, initiate it, else update it
+    logger.info(f"Initiating or updating vocabulary for user {user.id}...")
     stmt = select(Vocabulary).where(Vocabulary.user_id == user.id)
     vocabulary = (await session.execute(stmt)).scalar_one_or_none()
-    new_words = {}  # Collect new words added to the vocabulary
+    new_words = {}
 
-    logger.info(f"------Start to update vocabulary for user {user.id}...")
     if vocabulary:
         vocabulary_dict = vocabulary.vocabulary
         for word_id in video_word_ids:
@@ -309,10 +286,9 @@ async def initiate_or_update_vocabulary(session: AsyncSession, user: User, video
                 await detect_lemma_pos_pair_with_multiple_occurrences(vocabulary_dict)
         session.add(vocabulary)
         await session.flush()
-        logger.info(f"-----Vocabulary for user {user.id} updated with new words.")
+        logger.info(f"Vocabulary for user {user.id} updated with new words.")
 
     else:
-        logger.info(f"Vocabulary not found for user {user.id}. Initiating vocabulary.")
         vocabulary_dict = await _initiate_vocabulary(user.id, session)
         await detect_lemma_pos_pair_with_multiple_occurrences(vocabulary_dict)
         new_words = vocabulary_dict
@@ -338,15 +314,12 @@ async def _initiate_vocabulary(user_id: int, session: AsyncSession) -> Dict[str,
         user_id: User id
         session: AsyncSession
     """
-    # Select all “en” words for the user for later learning purpose
     stmt = select(User).where(User.id == user_id)
     user = (await session.execute(stmt)).scalar_one()
 
-    # Using word_ids to retrieve all words
     stmt = select(Word).where(Word.id.in_(user.word_ids))
     words = (await session.execute(stmt)).scalars().all()
 
-    # Filter words: remove stop words and keep only certain POS
     filtered_words = [
         word for word in words
         if (word.language == "en" and not NLP_EN.vocab[word.lemma].is_stop
@@ -362,7 +335,6 @@ async def _initiate_vocabulary(user_id: int, session: AsyncSession) -> Dict[str,
                 vocabulary_dict[key] = []
             vocabulary_dict[key].append([word.id, word.lemma])
 
-    # Create vocabulary entry and update User table
     vocabulary_entry = Vocabulary(
         user_id=user_id,
         vocabulary=vocabulary_dict
@@ -370,7 +342,6 @@ async def _initiate_vocabulary(user_id: int, session: AsyncSession) -> Dict[str,
     session.add(vocabulary_entry)
     await session.flush()
 
-    # Update User table
     user.vocabulary_id = vocabulary_entry.id
     session.add(user)
     await session.flush()
@@ -381,7 +352,6 @@ async def _initiate_vocabulary(user_id: int, session: AsyncSession) -> Dict[str,
 
 async def _initiate_families(user_id: int, session: AsyncSession) -> None:
     logger.info(f"Initiating families for user {user_id}...")
-    """Initialize families for a user based on their vocabulary."""
     vocabulary_dict = (
         await session.execute(select(Vocabulary).where(Vocabulary.user_id == user_id))).scalar_one().vocabulary
 
@@ -394,7 +364,6 @@ async def _initiate_families(user_id: int, session: AsyncSession) -> None:
                 families[word_lemma] = []
             families[word_lemma].append(word_id)
 
-    # Insert into Families table
     for key, value in families.items():
         family_entry = Families(
             user_id=user_id,
@@ -403,7 +372,6 @@ async def _initiate_families(user_id: int, session: AsyncSession) -> None:
         )
         session.add(family_entry)
 
-    # Commit families to the database
     await session.flush()
     await session.commit()
     logger.info(f"Families for user {user_id} initiated.")
@@ -414,18 +382,14 @@ async def _update_family_with_new_words(
         new_words: Dict[str, List[List[Union[int, str]]]],
         session: AsyncSession) -> None:
     logger.info(f"Updating Families for user {user_id} with new words.")
-    """Update Families table with only new words."""
 
-    # Fetch existing families for the user
     stmt = select(Families).where(Families.user_id == user_id)
     existing_families = {
         family.lemma: family for family in (await session.execute(stmt)).scalars().all()
     }
 
-    # Update or create families with new words
     for lemma, words in new_words.items():
         if lemma in existing_families:
-            # Family exists; update word_ids
             family = existing_families[lemma]
             existing_word_ids = set(family.word_ids)
             for word in words:
@@ -433,7 +397,6 @@ async def _update_family_with_new_words(
                     family.word_ids.append(word[0])
             session.add(family)
         else:
-            # Create a new family
             new_family = Families(
                 user_id=user_id,
                 lemma=lemma,
@@ -441,7 +404,6 @@ async def _update_family_with_new_words(
             )
             session.add(new_family)
 
-    # Commit the changes
     await session.flush()
     await session.commit()
     logger.info(f"Families for user {user_id} updated with new words.")
@@ -464,9 +426,8 @@ async def _initiate_graph(user_id: int, session: AsyncSession,
     Returns:
         None: The graph is stored in the database.
     """
-    logger.info(f"-----Building graph for user {user_id} with similarity_threshold {similarity_threshold}...")
+    logger.info(f"Building graph for user {user_id} with similarity_threshold {similarity_threshold}...")
 
-    # 1. Check if graph already exists
     stmt = select(Graph).where(Graph.user_id == user_id)
     existing_graph = (await session.execute(stmt)).scalar_one_or_none()
 
@@ -474,31 +435,26 @@ async def _initiate_graph(user_id: int, session: AsyncSession,
         logger.info(f"Graph already exists for user {user_id}")
         graph_entry = existing_graph
     else:
-        # Create new graph
         graph_entry = Graph(user_id=user_id)
         session.add(graph_entry)
         await session.flush()
 
-    # 2. Retrieve all families for the user
     stmt = select(Families).where(Families.user_id == user_id)
     families = (await session.execute(stmt)).scalars().all()
 
-    # 3. Fetch existing graph nodes
     stmt = select(GraphNode).where(GraphNode.graph_id == graph_entry.id)
     existing_nodes = {node.lemma: node for node in (await session.execute(stmt)).scalars().all()}
 
-    # Create nodes for this graph
+    # TODO: consider, in the future, if we delete the standalone nodes, or we keep them.
     nodes_dict = {}
     for family in families:
         if family.lemma in existing_nodes:
-            # Node already exists, update if necessary
             node = existing_nodes[family.lemma]
             if set(node.word_ids) != set(family.word_ids):
                 node.word_ids = list(set(node.word_ids + family.word_ids))
                 session.add(node)
             nodes_dict[family.lemma] = node
         else:
-            # Create new node for this graph
             node = GraphNode(
                 graph_id=graph_entry.id,
                 lemma=family.lemma,
@@ -515,11 +471,28 @@ async def _initiate_graph(user_id: int, session: AsyncSession,
         logger.info(f"No families found for user {user_id}.")
         return
 
-    # 4. Collect vectors
-    # List of vectors, either with all the words' vectors and a mapping,
-    # or with the mean vector of each family members
+    vectors, relation = await _collect_vectors(families, session, similarity_threshold)
+
+    if vectors.size == 0:
+        logger.error("No valid vectors found for any family. Please check.")
+        return
+
+    logger.debug(f"families shape: {len(families)}")
+    logger.debug(f"vectors shape: {vectors.shape}")
+
+    similarity_matrix = await _compute_similarity_matrix(vectors)
+
+    weighted_adj_list = await _build_adjacency_list(families, relation, similarity_matrix, similarity_threshold, k)
+
+    await _create_edges_in_db(session, graph_entry, nodes_dict, weighted_adj_list)
+
+    logger.info(
+        f"Graph for user {user_id} initialized successfully with {len(families)} nodes and"
+        f" {len(weighted_adj_list)} edges.")
+
+
+async def _collect_vectors(families, session, similarity_threshold):
     vectors = []
-    # A list to collect vectors for each family
     vectors_list = []
     # Flatten vectors and map them to families
     relation = defaultdict(list)
@@ -538,61 +511,41 @@ async def _initiate_graph(user_id: int, session: AsyncSession,
         vectors = np.array(vectors_list)
     else:
         for family in families:
-            # TODO: consider, in the future, if we delete the standalone nodes, or we keep them.
-            # Create and add the node
-            node = GraphNode(
-                graph_id=graph_entry.id,
-                lemma=family.lemma,
-                word_ids=family.word_ids,
-                mastery=0.5,  # Default mastery score
-                acquired=False
-            )
-            session.add(node)
-
+            vectors_for_family = []
             for word_id in family.word_ids:
                 result = await session.execute(select(Word).where(Word.id == word_id))
                 word = result.scalar_one()
                 if word.vector is not None:
-                    vectors_list.append(word.vector)
+                    vectors_for_family.append(word.vector)
                 else:
                     logger.info(f"Word {word.lemma} has no vector.")
-            # Compute the mean of the word vectors for the family
-            if vectors_list:
-                vectors.append(np.mean(vectors_list, axis=0))
+            if vectors_for_family:
+                vectors.append(np.mean(vectors_for_family, axis=0))
             else:
-                # The following warning should never appear
                 logger.warning(f"Family {family.lemma} has no valid word vectors and will be skipped.")
-        await session.flush()
+    return vectors, relation
 
-    if vectors.size == 0:
-        logger.error("No valid vectors found for any family. Please check.")
-        return
-    logger.debug(f"families shape: {len(families)}")
-    logger.debug(f"vectors shape: {vectors.shape}")
 
-    # 5. Compute similarity matrix
+async def _compute_similarity_matrix(vectors):
     logger.info(f"Computing similarity.")
-    # Normalize vectors and compute similarity matrix
     norms = np.linalg.norm(vectors, axis=1)
-    if np.any(norms == 0):  # Explicitly handle zero-norm vectors
+    if np.any(norms == 0):
         logger.error("Encountered zero norm vector during normalization.")
         return
 
     normalized_vectors = vectors / norms[:, np.newaxis]
     similarity_matrix = np.dot(normalized_vectors, normalized_vectors.T)
-
     logger.debug("Shape of vectors {}".format(vectors.shape))
     logger.debug("Shape of norms {}".format(norms.shape))
-    logger.debug(
-        "Shape of sim matrix {}".format(similarity_matrix.shape))
-
-    # Build adjacency list with degree restriction (max 5 edges per family)
+    logger.debug(f"Similarity matrix shape: {similarity_matrix.shape}")
+    return similarity_matrix
+    
+   
+async def _build_adjacency_list(families, relation, similarity_matrix, similarity_threshold, k):
     weighted_adj_list = []
-    degree = defaultdict(int)  # Track the degree of each node
+    degree = defaultdict(int)
 
-    if similarity_threshold != 0.0:  # If there is a meaningful similarity threshold (which is not 0.0)
-        logger.info(f"Similarity threshold set to {similarity_threshold}. Adding edges with similarity above "
-                    f"threshold. And restricting edges to max degree of 5.")
+    if similarity_threshold != 0.0:
         family_lemma_list = [family.lemma for family in families]
         relatives = {}
 
@@ -607,22 +560,17 @@ async def _initiate_graph(user_id: int, session: AsyncSession,
                         logger.warning(f"Skipping out-of-bounds index: x={x}, y={y}")
                         continue
                 score = max(similarity_matrix[x][y] for x, y in pairs)
-                if score > 0.3:
+                if score > similarity_threshold:
                     buffer.append((f1, f2, min(1.0, score)))
             relatives[f1] = sorted(buffer, key=lambda x: -x[2])
 
-        # Restrict edges to max degree of 5
         for f, edges in relatives.items():
             for e in edges:
                 if degree[e[0]] < k and degree[e[1]] < k:
                     weighted_adj_list.append(e)
                     degree[e[0]] += 1
                     degree[e[1]] += 1
-                else:
-                    break
     else:
-        logger.info("No similarity threshold set. Adding all edges.")
-        # Add all the edges
         family_lemma_list = [family.lemma for family in families]
         num_families = len(family_lemma_list)
         for i, f1 in tqdm(enumerate(family_lemma_list), total=num_families):
@@ -632,6 +580,7 @@ async def _initiate_graph(user_id: int, session: AsyncSession,
                     continue
                 if similarity_matrix[i][j] > similarity_threshold:
                     weighted_adj_list.append((f1, f2, similarity_matrix[i][j]))
+    return weighted_adj_list
 
     # # Build the graph using networkx
     # graph = nx.Graph()
@@ -642,6 +591,7 @@ async def _initiate_graph(user_id: int, session: AsyncSession,
     # nodes = sorted(graph.nodes(), key=str)
     # logger.debug(f"Print all the nodes: {nodes}")
 
+async def _create_edges_in_db(session, graph_entry, nodes_dict, weighted_adj_list):
     count = 0
     for node1_lemma, node2_lemma, weight in weighted_adj_list:
         stmt1 = select(GraphNode).where(GraphNode.graph_id == graph_entry.id, GraphNode.lemma == node1_lemma)
@@ -662,11 +612,7 @@ async def _initiate_graph(user_id: int, session: AsyncSession,
             logger.error(f"Node {node1_lemma} or {node2_lemma} not found in graph {graph_entry.id}")
     await session.flush()
     await session.commit()
-
-    logger.info(
-        f"------Graph for user {user_id} initialized successfully with {len(family_lemma_list)} nodes and"
-        f" {len(weighted_adj_list)} edges.")
-    logger.debug(f"------{count == len(weighted_adj_list)} ")
+    logger.debug(f"Graph edges created: {count == len(weighted_adj_list)}")
 
 
 async def _update_graph(
@@ -689,7 +635,6 @@ async def _update_graph(
     """
     logger.info(f"Updating graph for user {user_id} with similarity threshold {similarity_threshold}...")
 
-    # Fetch the user's graph
     stmt = select(Graph).where(Graph.user_id == user_id)
     graph_entry = (await session.execute(stmt)).scalar_one_or_none()
     logger.debug(f"Graph entry: {graph_entry.id}, {graph_entry.user_id}")
@@ -699,19 +644,15 @@ async def _update_graph(
         await _initiate_graph(user_id, session, similarity_threshold, k)
         return
 
-    # Fetch existing graph nodes
     stmt = select(GraphNode).where(GraphNode.graph_id == graph_entry.id)
     existing_nodes = {node.lemma: node for node in (await session.execute(stmt)).scalars().all()}
 
-    # Get all current families for the user
     stmt = select(Families).where(Families.user_id == user_id)
     current_families = {family.lemma: family for family in (await session.execute(stmt)).scalars().all()}
 
-    # Step 1: Update nodes in the graph
     nodes_dict = {}
     for lemma, family in current_families.items():
         if lemma in existing_nodes:
-            # Update existing node's word_ids if needed
             node = existing_nodes[lemma]
             existing_word_ids = node.word_ids if isinstance(node.word_ids, list) else list(node.word_ids)
             if set(existing_word_ids) != set(family.word_ids):
@@ -719,7 +660,6 @@ async def _update_graph(
                 session.add(node)
             nodes_dict[lemma] = node
         else:
-            # Create new node for this graph
             new_node = GraphNode(
                 graph_id=graph_entry.id,
                 lemma=lemma,
@@ -733,124 +673,30 @@ async def _update_graph(
     await session.flush()
     logger.debug(f"Nodes updated in the graph.")
 
-    # Step 2: Compute vector similarities and update edges
-    # Prepare vectors for similarity computation
-    vectors = []
-    vectors_list = []
-    relation = defaultdict(list)
-
-    if similarity_threshold != 0.0:
-        # Use individual word vectors when there's a meaningful similarity threshold
-        for family in current_families.values():
-            for word_id in family.word_ids:
-                result = await session.execute(select(Word).where(Word.id == word_id))
-                word = result.scalar_one()
-                if word.vector is not None:
-                    relation[family.lemma].append(len(vectors_list))
-                    vectors_list.append(word.vector)
-                else:
-                    logger.warning(f"Word {word.lemma} has no vector.")
-        vectors = np.array(vectors_list)
-    else:
-        # Use mean vectors when no similarity threshold
-        for family in current_families.values():
-            vectors_for_family = []
-            for word_id in family.word_ids:
-                result = await session.execute(select(Word).where(Word.id == word_id))
-                word = result.scalar_one()
-                if word.vector is not None:
-                    vectors_for_family.append(word.vector)
-                else:
-                    logger.info(f"Word {word.lemma} has no vector.")
-            if vectors_for_family:
-                vectors.append(np.mean(vectors_for_family, axis=0))
-            else:
-                logger.warning(f"Family {family.lemma} has no valid word vectors and will be skipped.")
+    vectors, relation = await _collect_vectors(current_families.values(), session, similarity_threshold)
 
     if (isinstance(vectors, list) and not vectors) or (isinstance(vectors, np.ndarray) and len(vectors) == 0):
         logger.error("No valid vectors found for any family. Please check.")
         return
 
-    logger.debug(f"----Vectors shape: {vectors.shape}")
+    logger.debug(f"Vectors shape: {vectors.shape}")
 
     # Remove all existing edges for this graph
     stmt = delete(GraphEdge).where(GraphEdge.graph_id == graph_entry.id)
     await session.execute(stmt)
     logger.debug(f"Existing edges removed from the graph.")
 
-    # Compute similarity matrix and create edges
-    logger.info(f"Computing similarity.")
-    norms = np.linalg.norm(vectors, axis=1)
-    if np.any(norms == 0):
-        logger.error("Encountered zero norm vector during normalization.")
-        return
+    similarity_matrix = await _compute_similarity_matrix(vectors)
 
-    normalized_vectors = vectors / norms[:, np.newaxis]
-    similarity_matrix = np.dot(normalized_vectors, normalized_vectors.T)
-    logger.debug(f"Similarity matrix shape: {similarity_matrix.shape}")
-    # Build adjacency list with degree restriction
-    weighted_adj_list = []
-    degree = defaultdict(int)
+    weighted_adj_list = await _build_adjacency_list(current_families.values(), relation, similarity_matrix, similarity_threshold, k)
 
-    if similarity_threshold != 0.0:
-        # Handle case with similarity threshold
-        family_names = list(current_families.keys())
-        relatives = {}
+    await _create_edges_in_db(session, graph_entry, nodes_dict, weighted_adj_list)
 
-        for i, f1 in enumerate(family_names):
-            buffer = []
-            for f2 in family_names[i + 1:]:
-                if f1 == f2:
-                    continue
-                pairs = list(itertools.product(relation[f1], relation[f2]))
-                for x, y in pairs:
-                    if x >= len(similarity_matrix) or y >= len(similarity_matrix):
-                        logger.warning(f"Skipping out-of-bounds index: x={x}, y={y}")
-                        continue
-                score = max(similarity_matrix[x][y] for x, y in pairs)
-                if score > similarity_threshold:
-                    buffer.append((f1, f2, min(1.0, score)))
-            relatives[f1] = sorted(buffer, key=lambda x: -x[2])
-
-        # Restrict edges to max degree of k
-        for f, edges in relatives.items():
-            for e in edges:
-                if degree[e[0]] < k and degree[e[1]] < k:
-                    weighted_adj_list.append(e)
-                    degree[e[0]] += 1
-                    degree[e[1]] += 1
-    else:
-        # Handle case without similarity threshold
-        family_names = list(current_families.keys())
-        num_families = len(family_names)
-        for i, f1 in enumerate(family_names):
-            for j, f2 in enumerate(family_names[i:]):
-                j += i
-                if f1 == f2:
-                    continue
-                weighted_adj_list.append((f1, f2, similarity_matrix[i][j]))
-
-    logger.debug(f"----Weighted adjacency list length: {len(weighted_adj_list)}")
-
-    # Create edges in the database
-    for node1_lemma, node2_lemma, weight in weighted_adj_list:
-        edge = GraphEdge(
-            graph_id=graph_entry.id,
-            node1_id=nodes_dict[node1_lemma].id,
-            node2_id=nodes_dict[node2_lemma].id,
-            weight=float(weight)
-        )
-        session.add(edge)
-
-    await session.flush()
-    logger.info(f"-----Graph for user {user_id} updated successfully with {len(weighted_adj_list)} edges.")
-
-    # Step 3: Finalize updates
     graph_entry.last_updated = func.now()
     session.add(graph_entry)
     await session.commit()
 
-    logger.info(f"Graph for user {user_id} updated successfully. ")
+    logger.info(f"Graph for user {user_id} updated successfully.")
 
 
 @router.get("/stream/{video_id}")
@@ -870,7 +716,6 @@ async def stream_video(
     Returns:
         FileResponse: Video file stream
     """
-    # Get video path
     stmt = select(Video).where(Video.id == video_id)
     video = (await session.execute(stmt)).scalar_one_or_none()
 
@@ -900,7 +745,6 @@ async def get_subtitles(
     Returns:
         FileResponse: VTT subtitle file
     """
-    # Get VTT path
     stmt = select(Video).where(Video.id == video_id)
     video = (await session.execute(stmt)).scalar_one_or_none()
 
