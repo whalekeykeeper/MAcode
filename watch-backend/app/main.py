@@ -16,6 +16,8 @@ app = FastAPI(
     docs_url="/",
     debug=True,
 )
+
+# Include the main API router
 app.include_router(api_router, prefix="/api")
 
 # Sets all CORS enabled origins
