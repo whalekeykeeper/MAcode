@@ -10,7 +10,7 @@ from app.schemas.responses import UserResponse
 router = APIRouter()
 
 
-@router.post("/user", response_model=UserResponse, status_code=200)
+@router.post("/", response_model=UserResponse, status_code=200)
 async def get_or_create_user(
         user_request: UserRequest,
         session: AsyncSession = Depends(deps.get_session),
