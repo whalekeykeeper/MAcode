@@ -35,10 +35,9 @@ async def get_current_user(
     stmt = select(User).where(User.uuid == uuid)
     user = (await session.execute(stmt)).scalar_one_or_none()
 
-    # If user doesn't exist, create new user but don't commit here
+    # If user doesn't exist, raise an error
     if not user:
-        logger.info(f"Creating new user with UUID: {uuid}")
-        user = User(uuid=uuid)
-        session.add(user)
-
+        raise HTTPException(status_code=401, detail="Invalid user in get_current_user in deps.py")
+    
     return user
+
