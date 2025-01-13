@@ -2,7 +2,6 @@
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import JSONResponse
 
 from app.api.api import api_router
@@ -29,8 +28,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Guards against HTTP Host Header attacks
-app.add_middleware(TrustedHostMiddleware, allowed_hosts=config.settings.ALLOWED_HOSTS)
+# # Guards against HTTP Host Header attacks
+# app.add_middleware(TrustedHostMiddleware, allowed_hosts=config.settings.ALLOWED_HOSTS)
 
 logger.info("Application started successfully.")
 
