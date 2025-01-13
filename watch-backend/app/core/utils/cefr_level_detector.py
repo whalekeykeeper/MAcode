@@ -169,34 +169,6 @@ def align_with_spacy_pos(pos: str) -> str:
     return spacy_to_cefrj_mapping.get(pos, "other")
 
 
-def detect_cefrj_level(text: str, pos: str, pos_or_tag: str) -> str:
-    """
-    Give text and pos for a word, the pos comes from either token.pos_ or token.tag_ in spacy,
-    return the corresponding CEFR_J level if a match is found, otherwise return "".
-    """
-    default_cefr_path = (
-            Path(__file__).parent.parent.parent / "resources/CEFR_combined_data.csv"
-    )
-
-    cefr_data = pd.read_csv(default_cefr_path)
-
-    aligned_pos = (
-        align_with_spacy_tag(pos) if pos_or_tag == "tag" else align_with_spacy_pos(pos)
-    )
-    if aligned_pos:
-        matching_row = cefr_data[
-            (cefr_data["headword"].str.lower() == text.lower().strip())
-            & (cefr_data["pos"] == aligned_pos)
-            ]
-        if not matching_row.empty:
-            return matching_row.iloc[0]["CEFR"]
-
-    # logger.debug(
-    #     f"Cannot find CEFR_J level for word {text} with pos {aligned_pos} in spacy token.{pos_or_tag}_."
-    # )
-    return ""
-
-
 def read_tag_spacy() -> list:
     return TAG_SPACY_STRING.split(", ")
 
@@ -211,19 +183,19 @@ def read_pos_cefrj() -> list:
 
 
 def _align_tag() -> dict:
-    mapping = {}
+    map = {}
     # The keys are pos tags in CEFR_J dataset.
     # The values are corresponding pos tags in Spacy label Scheme for en_core_web_lg. Url:
     # https://spacy.io/models/en#en_core_web_lg.
 
     # ToDo: check again if the values are all correct
     # Infinitive
-    mapping["infinitive-to"] = ["TO"]
+    map["infinitive-to"] = ["TO"]
     # Nouns
-    mapping["noun"] = ["NN", "NNS", "NNP", "NNPS"]
+    map["noun"] = ["NN", "NNS", "NNP", "NNPS"]
     # Verbs
-    mapping["verb"] = ["VB", "VBD", "VBG", "VBN", "VBP", "VBZ"]
-    mapping["do-verb"] = [
+    map["verb"] = ["VB", "VBD", "VBG", "VBN", "VBP", "VBZ"]
+    map["do-verb"] = [
         "VB",
         "VBD",
         "VBG",
@@ -231,8 +203,8 @@ def _align_tag() -> dict:
         "VBP",
         "VBZ",
     ]  # DO can fall into regular verbs
-    mapping["have-verb"] = ["VB", "VBD", "VBG", "VBN", "VBP", "VBZ"]  # Same as verbs
-    mapping["be-verb"] = [
+    map["have-verb"] = ["VB", "VBD", "VBG", "VBN", "VBP", "VBZ"]  # Same as verbs
+    map["be-verb"] = [
         "VB",
         "VBD",
         "VBG",
@@ -241,25 +213,25 @@ def _align_tag() -> dict:
         "VBZ",
     ]  # BE can also fall under verbs
     # Adjectives
-    mapping["adjective"] = ["JJ", "JJR", "JJS"]
+    map["adjective"] = ["JJ", "JJR", "JJS"]
     # Adverbs
-    mapping["adverb"] = ["RB", "RBR", "RBS", "WRB"]
+    map["adverb"] = ["RB", "RBR", "RBS", "WRB"]
     # Prepositions
-    mapping["preposition"] = ["IN"]
+    map["preposition"] = ["IN"]
     # Determiners
-    mapping["determiner"] = ["DT", "PDT", "WDT"]
+    map["determiner"] = ["DT", "PDT", "WDT"]
     # Pronouns
-    mapping["pronoun"] = ["PRP", "PRP$", "WP", "WP$"]
+    map["pronoun"] = ["PRP", "PRP$", "WP", "WP$"]
     # Modal auxiliaries
-    mapping["modal auxiliary"] = ["MD"]
+    map["modal auxiliary"] = ["MD"]
     # Conjunctions
-    mapping["conjunction"] = ["CC", "IN"]
+    map["conjunction"] = ["CC", "IN"]
     # Numbers
-    mapping["number"] = ["CD", "LS"]
+    map["number"] = ["CD", "LS"]
     # Interjections
-    mapping["interjection"] = ["UH"]
+    map["interjection"] = ["UH"]
     # Others (including punctuations and special cases like spaces)
-    mapping["other"] = [
+    map["other"] = [
         "FW",
         "SYM",
         "XX",
@@ -284,7 +256,42 @@ def _align_tag() -> dict:
         "RP",
     ]
 
-    return mapping
+    return map
+
+
+def detect_cefrj_level(lemma: str) -> str:
+    """
+    Detect the CEFR level of the given word (lemma).
+
+    Args:
+        lemma (str): The word to look up.
+
+    Returns:
+        str: The lowest CEFR level (e.g., A1, A2, etc.) or an empty string if no match is found.
+    """
+    default_cefr_path = (
+            Path(__file__).parent.parent.parent / "resources/CEFR_combined_data.csv"
+    )
+
+    cefr_data = pd.read_csv(default_cefr_path)
+
+    matching_rows = cefr_data[
+        cefr_data["headword"].str.lower().str.strip() == lemma.lower().strip()
+        ]
+
+    if not matching_rows.empty:
+        # The CEFR levels in priority order
+        cefr_priority_order = ["A1", "A2", "B1", "B2"]
+
+        # Get all unique CEFR levels for the matching entries
+        cefr_levels = matching_rows["CEFR"].unique()
+
+        # Return the first level in priority order that is found in the matches
+        for level in cefr_priority_order:
+            if level in cefr_levels:
+                return level
+
+    return ""  # Return an empty string if no match is found
 
 
 if __name__ == "__main__":
@@ -297,7 +304,8 @@ if __name__ == "__main__":
     print(set(pos_cefrj) - set(mapping.keys()) == set())
     print()
     # Choose to use token.pos_ or token.tag_.
-    print(detect_cefrj_level("desk", "NOUN", "pos"))
-    print(detect_cefrj_level("stressful", "ADJ", "pos"))
-
-    print(detect_cefrj_level("move", "VB", "tag"))
+    for l in ("block, book, century, change, create, cause, early, feel, human, idea, imagination, "
+              "include, know, large, mean, place, spread, start, thing, think, time, "
+              "use, work, big").split(", "):
+        print(l, detect_cefrj_level(l))
+        print()
