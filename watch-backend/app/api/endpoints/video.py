@@ -10,12 +10,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api import deps
 from app.core.logger import logger
+from app.core.utils.video_chosen_words_from_line_processor import address_words_in_line
 from app.core.utils.video_subtitles_downloader import get_ytb_id
 from app.core.video_service import get_existing_video, ensure_bilingual_subtitles, current_user_has_watched, \
     process_existed_video_for_new_user, process_new_video
 from app.models import User, Video
-from app.schemas.requests import VideoRequest
-from app.schemas.responses import VideoResponse
+from app.schemas.requests import VideoRequest, VideoChosenWordsRequest
+from app.schemas.responses import VideoResponse, VideoChosenWordsResponse
 
 router = APIRouter()
 
@@ -25,8 +26,10 @@ async def process_video(
         video_request: VideoRequest,
         uuid: str = Header(...),
         session: AsyncSession = Depends(deps.get_session),
-        current_user: User = Depends(deps.get_current_user),
 ):
+    """
+    Process a video request, download, parse, and store data.
+    """
     logger.debug("Starting process_video endpoint")
     if not uuid:
         logger.error("UUID header is missing")
@@ -61,8 +64,8 @@ async def process_video(
         if existing_video:
             logger.info(f"Video {ytb_id} already exists in the database.")
             await ensure_bilingual_subtitles(existing_video, static_folder, session)
-            if await current_user_has_watched(current_user.id, existing_video.id, session):
-                logger.info(f"User {current_user.id} has already watched video {existing_video.id}.")
+            if await current_user_has_watched(user.id, existing_video.id, session):
+                logger.info(f"User {user.id} has already watched video {existing_video.id}.")
                 return VideoResponse(
                     id=existing_video.id,
                     ytb_id=existing_video.ytb_id,
@@ -71,8 +74,8 @@ async def process_video(
                     vtt_path=existing_video.vtt_path,
                     uuid=user.uuid
                 )
-            await process_existed_video_for_new_user(current_user, existing_video.id, session)
-            logger.info(f"Processed existing video {ytb_id} for user {current_user.id}.")
+            await process_existed_video_for_new_user(user, existing_video.id, session)
+            logger.info(f"Processed existing video {ytb_id} for user {user.id}.")
             await session.commit()
             return VideoResponse(
                 id=existing_video.id,
@@ -85,7 +88,7 @@ async def process_video(
 
         else:
             logger.info(f"Video {ytb_id} does not exist in the database. Processing subtitles.")
-            new_video = await process_new_video(url, ytb_id, static_folder, current_user, session)
+            new_video = await process_new_video(url, ytb_id, static_folder, user, session)
             await session.commit()
             return VideoResponse(
                 id=new_video.id,
@@ -107,9 +110,8 @@ async def process_video(
 
 @router.get("/stream/{video_id}")
 async def stream_video(
-        video_id: str,
+        video_id: int,
         session: AsyncSession = Depends(deps.get_session),
-        current_user: User = Depends(deps.get_current_user),
 ):
     """
     Stream a video file to the client.
@@ -117,7 +119,6 @@ async def stream_video(
     Args:
         video_id: Database ID of the video (not YouTube ID)
         session: Database session
-        current_user: Current authenticated user
         
     Returns:
         FileResponse: Video file stream
@@ -136,9 +137,8 @@ async def stream_video(
 
 @router.get("/vtt/{video_id}")
 async def get_subtitles(
-        video_id: str,
+        video_id: int,
         session: AsyncSession = Depends(deps.get_session),
-        current_user: User = Depends(deps.get_current_user),
 ):
     """
     Stream subtitle file to the client.
@@ -146,7 +146,6 @@ async def get_subtitles(
     Args:
         video_id: Database ID of the video (not YouTube ID)
         session: Database session
-        current_user: Current authenticated user
         
     Returns:
         FileResponse: VTT subtitle file
@@ -160,7 +159,55 @@ async def get_subtitles(
     if not Path(video.vtt_path).exists():
         raise HTTPException(status_code=404, detail="VTT file not found")
 
+    logger.debug(video.vtt_path[-18:])
     return FileResponse(video.vtt_path, filename=video.vtt_path[-18:])
+
+
+@router.post("/chosen", response_model=VideoChosenWordsResponse)
+async def record_chosen_words(
+        chosen_request: VideoChosenWordsRequest,
+        uuid: str = Header(...),
+        session: AsyncSession = Depends(deps.get_session),
+) -> VideoChosenWordsResponse:
+    """
+    Collect user's space-bar-pressing actions, analyze and store interesting chosen words in database.
+    This endpoint is called when the user presses the space bar.
+
+    Note this endpoint has nothing with the "acquired" changes in the word list view (the page to show the chosen words
+     for the current user).
+
+    Args:
+        chosen_request: VideoChosenWordsRequest, the request object
+        uuid: str, the user's uuid
+        session: Database session
+
+    Returns:
+        VideoChosenWordsResponse: The chosen words response in a list of tuples
+    """
+    stmt = select(User).where(User.uuid == uuid)
+    user = (await session.execute(stmt)).scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=401, detail="Can't find the user with the given UUID {uuid} "
+                                                    "when recording chosen words.")
+    # TODO: Think about the frontend, could the line id be offered? If yes, can use the line id directly to get line.
+    chosen_words = await address_words_in_line(
+        chosen_request.start_time,
+        chosen_request.end_time,
+        chosen_request.video_id,
+        user_id=user.id,
+        session=session
+    )
+    for word in chosen_words:
+        logger.debug(f"=====Chosen word: {word}")
+    if len(chosen_words) != 0:
+        return VideoChosenWordsResponse(
+            chosen_words=chosen_words,
+        )
+    else:
+        logger.info(f"No chosen words found or the chosen word is already in database.")
+        return VideoChosenWordsResponse(
+            chosen_words=[],
+        )
 
 
 @router.get("/test")
