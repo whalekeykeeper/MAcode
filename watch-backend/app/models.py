@@ -16,7 +16,7 @@
 
 from datetime import datetime
 from uuid import uuid4
-from sqlalchemy import UniqueConstraint
+
 from sqlalchemy import (
     JSON,
     Boolean,
@@ -28,6 +28,7 @@ from sqlalchemy import (
     String,
     func,
 )
+from sqlalchemy import UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
@@ -96,6 +97,8 @@ class Line(Base):
     line_text: Mapped[str] = mapped_column(String(50000), nullable=False)
     start_timestamp: Mapped[str] = mapped_column(String(100), nullable=False)
     end_timestamp: Mapped[str] = mapped_column(String(100), nullable=False)
+
+    sentence_id: Mapped[int] = mapped_column(ForeignKey("sentence_model.id"), nullable=True)
     __table_args__ = (Index("idx_line_language", "language"),)
 
 
@@ -147,10 +150,11 @@ class Word(Base):
     video_id: Mapped[int] = mapped_column(ForeignKey("video_model.id"), nullable=False)
 
     # translation is expected to be extracted from subtitle in the other language in the bilingual subtitle.
-    # We could use mBERT to align words, but it is taking too much memory, for now, we will send the word and the context to query with Gemini API.
+    # ToDo: a word_selection problem. Partial word alignment.
     translation: Mapped[str] = mapped_column(String(50), nullable=True)
 
     vector: Mapped[list] = mapped_column(JSON, nullable=True)
+
     # complexity is calculated based on the frequency of the word in the subtlexus.csv
     complexity: Mapped[float] = mapped_column(Float, nullable=True)
 
@@ -171,16 +175,22 @@ class ChosenWords(Base):
     # Even if a word is chosen multiple times, we only store its id once here.
     word_id: Mapped[int] = mapped_column(ForeignKey("word_model.id"), nullable=False)
 
-    # marked_as_learned is used to mark the word as learned by the user in the frontend, only available for the user
-    # in the wordlist page. It is user-specific.
-    marked_as_learned: Mapped[bool] = mapped_column(
-        Boolean, nullable=True, default=False
-    )
+    # We store lemma here, because if a lemma is marked as learned, we then update it as "acquired" in the GraphNode
+    # table.
+    lemma: Mapped[str] = mapped_column(String(50), nullable=False, unique=True)
 
-    # record_time is the time when the word is chosen so that we can sort the words by time.
-    record_time: Mapped[datetime] = mapped_column(
-        DateTime, nullable=False, default=func.now
-    )
+    # TODO: We store the sentence and translation for given word_id just for convenience. This should be improved in
+    #  the future.
+    sentence: Mapped[str] = mapped_column(String(500), nullable=False)
+    translation: Mapped[str] = mapped_column(String(50), nullable=True)
+
+    # marked_as_learned is used to mark the word as learned by the user in the frontend.
+    # It is user-specific.
+    marked_as_learned: Mapped[bool] = mapped_column(Boolean, nullable=True, default=False)
+
+    graph_node_id: Mapped[int] = mapped_column(ForeignKey("graph_node.id"), nullable=True)
+    # record_time is the time when the word (lemma) is chosen so that we can sort the words by time.
+    record_time: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=func.now)
 
 
 class Vocabulary(Base):
