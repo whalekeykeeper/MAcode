@@ -14,6 +14,7 @@ from app.core.logger import logger
 from app.core.utils.bilingual_subtitle_creator import create_bilingual_vtt
 from app.core.utils.subtitle_processor import SubtitleProcessor
 from app.core.utils.video_subtitles_downloader import download_video_and_subtitles
+from app.core.utils.word_candidate_filter import filter_pipeline
 from app.models import Video, User, Families, Graph, Vocabulary, Word, GraphNode, GraphEdge
 
 # Load language models
@@ -130,7 +131,6 @@ async def process_new_video(
         await subtitle_processor.process_subtitles(
             ytb_id=new_video.ytb_id,
             user_uuid=user.uuid,
-            valid_pos=VALID_POS,
             session=session
         )
 
@@ -181,7 +181,9 @@ async def process_user_specific_data(
     user.word_ids = list(set(user.word_ids + video_word_ids))
     session.add(user)
     await session.flush()
+
     new_words = await initiate_or_update_vocabulary(session, user, video_word_ids)
+    logger.info(f"Vocabulary initiated or updated for user {user.id}.")
 
     stmt = select(Families).where(Families.user_id == user.id)
     families = (await session.execute(stmt)).scalars().all()
@@ -189,6 +191,7 @@ async def process_user_specific_data(
         await update_family_with_new_words(user.id, new_words, session)
     else:
         await initiate_families(user.id, session)
+    logger.info(f"Families initiated or updated for user {user.id}.")
 
     stmt = select(Graph).where(Graph.user_id == user.id)
     graph = (await session.execute(stmt)).scalar_one_or_none()
@@ -212,15 +215,25 @@ async def initiate_or_update_vocabulary(session: AsyncSession, user: User, video
         for word_id in video_word_ids:
             stmt = select(Word).where(Word.id == word_id)
             word = (await session.execute(stmt)).scalar_one_or_none()
-            if (word and word.language == "en" and not NLP_EN.vocab[str(word.lemma)].is_stop and word.lemma in
-                    VALID_POS and not NLP_EN.vocab[str(word.lemma)].is_punct):
+
+            # Only add English words to the vocabulary for now
+            if (word and str(word.language) == "en"
+                    and filter_pipeline(str(word.language), word.lemma, word.pos, word.word)):
+
+                if word.lemma in ("block, book, century, change, create, early, feel, human, idea, imagination, "
+                                  "include, know, large, mean, place, spread, start, thing, think, time, "
+                                  "use, work, big").split(", "):
+                    logger.debug(f"=========!!!!!!@@@@@Word: {word.lemma}, {word.pos}, {word.word}, {str(word.cefr)}")
+                    logger.debug(f"=========!!!!!!@@@@@Word: {word.lemma}, {word.pos}, {word.word}, {word.cefr}")
                 key = f"{word.lemma};{word.pos}"
                 if key not in vocabulary_dict:
                     vocabulary_dict[key] = []
-                    new_words[lemma] = []
+                if key not in new_words:
+                    new_words[key] = []
                 vocabulary_dict[key].append([word.id, word.lemma])
                 new_words[key].append([word.id, word.lemma])
-                await detect_lemma_pos_pair_with_multiple_occurrences(vocabulary_dict)
+
+        await detect_lemma_pos_pair_with_multiple_occurrences(vocabulary_dict)
         session.add(vocabulary)
         await session.flush()
         logger.info(f"Vocabulary for user {user.id} updated with new words.")
@@ -239,7 +252,6 @@ async def detect_lemma_pos_pair_with_multiple_occurrences(vocabulary_dict):
     lemma_pos_pairs_has_more_than_5_occurrences = 0
     for key, value in vocabulary_dict.items():
         if len(value) > 5:
-            logger.info(f"Family {key} has {len(value)} words.")
             lemma_pos_pairs_has_more_than_5_occurrences += 1
 
 
@@ -251,22 +263,19 @@ async def initiate_vocabulary(user_id: int, session: AsyncSession) -> Dict[str, 
         user_id: User id
         session: AsyncSession
     """
+    logger.debug(f"Initiating vocabulary for user {user_id} ...")
     stmt = select(User).where(User.id == user_id)
     user = (await session.execute(stmt)).scalar_one()
 
     stmt = select(Word).where(Word.id.in_(user.word_ids))
     words = (await session.execute(stmt)).scalars().all()
 
-    filtered_words = [
-        word for word in words
-        if (word.language == "en" and not NLP_EN.vocab[word.lemma].is_stop
-            and word.pos in VALID_POS and not NLP_EN.vocab[word.lemma].is_punct)
-    ]
-
     # Create dictionary with lemma+pos as key, a list of (id, lemma) as value
     vocabulary_dict: Dict[str, List[List[Union[int, str]]]] = {}
-    for word in filtered_words:
-        if word:
+    for word in words:
+        # Only add English words to the vocabulary for now
+        if word and word.language == "en" and filter_pipeline(word.language, word.lemma, word.pos, word.word):
+
             key = f"{word.lemma};{word.pos}"
             if key not in vocabulary_dict:
                 vocabulary_dict[key] = []
@@ -325,7 +334,8 @@ async def update_family_with_new_words(
         family.lemma: family for family in (await session.execute(stmt)).scalars().all()
     }
 
-    for lemma, words in new_words.items():
+    for lemma_pos_pair, words in new_words.items():
+        lemma = lemma_pos_pair.split(";")[0]
         if lemma in existing_families:
             family = existing_families[lemma]
             existing_word_ids = set(family.word_ids)
@@ -617,8 +627,6 @@ async def update_graph(
         logger.error("No valid vectors found for any family. Please check.")
         return
 
-    logger.debug(f"Vectors shape: {vectors.shape}")
-
     # Remove all existing edges for this graph
     stmt = delete(GraphEdge).where(GraphEdge.graph_id == graph_entry.id)
     await session.execute(stmt)
@@ -635,4 +643,5 @@ async def update_graph(
     session.add(graph_entry)
     await session.commit()
 
-    logger.info(f"Graph for user {user_id} updated successfully.")
+    logger.info(
+        f"Graph for user {user_id} updated successfully. Now, it has {len(nodes_dict)} nodes and {len(weighted_adj_list)} edges.")
