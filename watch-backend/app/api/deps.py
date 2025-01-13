@@ -1,12 +1,9 @@
-from typing import AsyncGenerator, Optional
+from typing import AsyncGenerator
 
-from fastapi import Depends, Header, HTTPException
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.logger import logger
 from app.core.session import async_session
-from app.models import User
 
 
 async def get_session() -> AsyncGenerator[AsyncSession, None]:
@@ -22,22 +19,20 @@ async def get_session() -> AsyncGenerator[AsyncSession, None]:
             await session.close()
             logger.debug("Database session closed")
 
-
-async def get_current_user(
-        session: AsyncSession = Depends(get_session),
-        uuid: Optional[str] = Header(None)
-) -> User:
-    logger.debug(f"Getting user for UUID: {uuid}")
-    if not uuid:
-        raise HTTPException(status_code=400, detail="uuid header is required")
-
-    # Try to get existing user
-    stmt = select(User).where(User.uuid == uuid)
-    user = (await session.execute(stmt)).scalar_one_or_none()
-
-    # If user doesn't exist, raise an error
-    if not user:
-        raise HTTPException(status_code=401, detail="Invalid user in get_current_user in deps.py")
-    
-    return user
-
+# async def get_current_user(
+#         session: AsyncSession = Depends(get_session),
+#         uuid: Optional[str] = Header(None)
+# ) -> User:
+#     logger.debug(f"Getting user for UUID: {uuid}")
+#     if not uuid:
+#         raise HTTPException(status_code=400, detail="uuid header is required")
+#
+#     # Try to get existing user
+#     stmt = select(User).where(User.uuid == uuid)
+#     user = (await session.execute(stmt)).scalar_one_or_none()
+#
+#     # If user doesn't exist, raise an error
+#     if not user:
+#         raise HTTPException(status_code=401, detail="Invalid user in get_current_user in deps.py")
+#
+#     return user
