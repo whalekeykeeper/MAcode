@@ -17,6 +17,7 @@ from sqlalchemy.orm import sessionmaker
 
 from app.core.logger import logger
 from app.core.utils.cefr_level_detector import detect_cefrj_level
+from app.core.utils.word_candidate_filter import filter_pipeline
 from app.models import Line, Sentence, User, Video, Word
 
 NLP_EN = spacy.load("en_core_web_lg")
@@ -45,7 +46,7 @@ class SentenceData:
 
 def analyze_text(
         lines_dict: dict[int, str], language: str
-) -> Tuple[List[Dict[str, List[int]]], List[Dict[str, str]]]:
+) -> Tuple[List[Dict[str, List[int]]], List[Dict[str, str]], List[str]]:
     """
     Analyzes the text to map sentences and tokens to lines.
 
@@ -58,6 +59,7 @@ def analyze_text(
           line_ids and sentence_text.
         - A collection of tokens where each token has:
           line_id, text, lemma, and pos.
+        - A list of A1 and A2 lemmas.
     """
     nlp = NLP_ZH if language == "zh" else NLP_EN
 
@@ -103,10 +105,48 @@ def analyze_text(
             "sentence_text": sent.text.strip()
         })
 
+    # Calculate the CEFR level for the token and collect A1 and A2 words
+    cefr_dict = {}
+    a1_a2_lemma_list = []
+
+    for token in doc:
+        if language != "en":
+            cefr_dict[token.lemma_] = ""
+        else:
+            cefr = detect_cefrj_level(token.text)
+            if cefr:  # If we detected a CEFR level
+                if cefr in ["A1", "A2", "a1", "a2"]:
+                    a1_a2_lemma_list.append(token.lemma_)
+                else:
+                    # Each (token.lemma_, token.pos_) key should only have one CEFR level
+                    # TODO: check it in the CEFR_J database.
+                    #  Though even if it has multiple CEFR levels, it doesn not matter now.
+                    cefr_dict[token.lemma_] = cefr
+            else:
+                cefr_dict[token.lemma_] = ""
+    a1_a2_lemma_list = list(set(a1_a2_lemma_list))
+
+    # Remove A1 and A2 words from cefr_dict since some a1_a2 words entered the dictionary without level and then with
+    # a1/a2 level.
+    for k, v in cefr_dict.items():
+        if k in a1_a2_lemma_list:
+            cefr_dict[k] = ""
+
     # Process tokens
     for token in doc:
+        if token.lemma in ("block, book, century, change, create, early, feel, human, idea, imagination, "
+                           "include, know, large, mean, place, spread, start, thing, think, time, "
+                           "use, work, big").split(", "):
+            logger.info(f"!!!!!_____!!!!!!should be either a1 or a2: {cefr_dict[token.lemma]}")
+
         start_idx = token.idx
         end_idx = start_idx + len(token.text)
+        if token.lemma_ in a1_a2_lemma_list:
+            continue
+        cefr = cefr_dict.get((token.lemma_, token.pos_), "")
+        # Filter tokens based on linguistic criteria: punctuation, stop words, POS.
+        if not filter_pipeline(language, token.lemma_, token.pos_, token.text):
+            continue
 
         # Find the line ID for this token
         token_line_ids = set()
@@ -122,10 +162,10 @@ def analyze_text(
                 "text": token.text,
                 "lemma": token.lemma_,
                 "pos": token.pos_,
+                "cefr": cefr,
                 "vector": token.vector.tolist() if token.has_vector else None
             })
-
-    return sentence_collection, token_collection
+    return sentence_collection, token_collection, a1_a2_lemma_list
 
 
 class SubtitleProcessor:
@@ -136,7 +176,6 @@ class SubtitleProcessor:
             self,
             ytb_id: str,
             user_uuid: str,
-            valid_pos: List[str],
             session: AsyncSession,
             similarity_threshold: float = 0.3,
     ) -> str:
@@ -163,12 +202,12 @@ class SubtitleProcessor:
 
         # Parse lines_dict to get sentences and tokens
         for language in ["zh", "en"]:
-            sentence_collection, token_collection = analyze_text(
+            sentence_collection, token_collection, a1_a2_lemma_list = analyze_text(
                 lines_dict_bi[language], language
             )
             # Create sentence entries and word entries basing on sentence_data_list and token_data_list
-            await self._create_sentence_word_entries(sentence_collection, token_collection, language, video.id, session
-                                                     )
+            await self._create_sentence_word_entries(sentence_collection, token_collection, language, video.id,
+                                                     a1_a2_lemma_list, session)
 
         await self._update_word_ids_and_texts(
             video, user, full_zh_text, full_en_text, session
@@ -269,13 +308,11 @@ class SubtitleProcessor:
             logger.info(f"Successfully read subtitle file")
 
             for i, caption in enumerate(vtt):
-                if "§§§" in caption.text:
-                    zh_text, en_text = caption.text.split("§§§")
-                    zh_text = zh_text.strip()
-                    en_text = en_text.strip()
-                else:
-                    # For single language line, ignore it, to make sure we have bilingual lines only
-                    continue
+                if "§§§" not in caption.text:
+                    continue  # Skip lines without bilingual content
+                zh_text, en_text = caption.text.split("§§§")
+                zh_text = zh_text.strip()
+                en_text = en_text.strip()
 
                 if zh_text:
                     # TODO: for Chinese subtitles that the line which contains "翻译人员" and/or "校对人员" in TED Talks' videos
@@ -370,6 +407,7 @@ class SubtitleProcessor:
                                             token_collection: List[Dict[str, str]],
                                             language: str,
                                             video_id: int,
+                                            a1_a2_lemma_list: List[str],
                                             session: AsyncSession,
                                             ) -> None:
         """Create Sentence and Word entries for each sentence and token."""
@@ -379,11 +417,18 @@ class SubtitleProcessor:
                 video_id=video_id,
                 language=language,
                 line_ids=sent["line_ids"],
-                sentence_text=sent["sentence_text"],
+                sentence_text=sent["sentence_text"],  # ignore the Pycharm warning
             )
             session.add(sentence_entry)
-        # Flush to get all sentence IDs
-        await session.flush()
+            await session.flush()
+
+            for line_id in sent["line_ids"]:
+                stmt = select(Line).where(Line.id == line_id)
+                line = (await session.execute(stmt)).scalar_one()
+                line.sentence_id = sentence_entry.id
+                session.add(line)
+            await session.flush()
+
         if language == "zh":
             self.new_video_stats["zh"]["new_sentences"] = len(sentence_collection)
         if language == "en":
@@ -391,16 +436,11 @@ class SubtitleProcessor:
         logger.info(f"Created {len(sentence_collection)} sentences for {language}.")
 
         logger.info(f"Starting to create words for {language}...")
-        if language == "en":
-            logger.info("Detecting CEFR levels for English words...")
         # Create all Word objects
         for token_data in token_collection:
-            # Calculate the CEFR level
-            cefr = (
-                detect_cefrj_level(token_data["text"], token_data["pos"], "pos")
-                if language == "en"
-                else ""
-            )
+            if token_data["lemma"] in a1_a2_lemma_list:
+                logger.warning(f"!!!This lemma should not occur here, check.")
+                continue
             word_vector = token_data.get("vector", None)
             if word_vector is not None:
                 # Create word object
@@ -411,12 +451,9 @@ class SubtitleProcessor:
                     pos=token_data["pos"],
                     line_id=token_data["line_id"],
                     video_id=video_id,
-                    cefr=cefr,
+                    cefr=token_data.get("cefr", ""),
                     vector=word_vector,
                 )
-            else:
-                logger.debug(
-                    f"Word '{token_data['text']}' has no vector. Therefore, it is not collected into the database.")
             session.add(word)
         if language == "zh":
             self.new_video_stats["zh"]["new_words"] = len(token_collection)
@@ -565,7 +602,7 @@ if __name__ == "__main__":
 
                 # Process subtitles for the first user and video
                 vtt_processed_path = await processor.process_subtitles(
-                    ytb_id=ytb_id, user_uuid=user1.uuid, valid_pos=["NOUN", "VERB", "ADJ", "ADV", "PROPN", "INTJ"],
+                    ytb_id=ytb_id, user_uuid=user1.uuid,
                     session=session
                 )
                 print(f"Processed subtitles for video: {vtt_processed_path}")
@@ -682,16 +719,6 @@ if __name__ == "__main__":
                 print(f"Error during test: {str(e)}")
                 raise
 
-
-    """
-    Expected:
-    Final Database Statistics:
-    Words: 654
-    Lines: 157
-    Sentences: 77
-    Word Contexts: 517
-
-    """
 
     # Run the test
     start_time = time.time()
