@@ -1,3 +1,6 @@
+from datetime import datetime
+from typing import Tuple, List
+
 from pydantic import BaseModel, ConfigDict
 
 
@@ -28,21 +31,21 @@ class VideoResponse(BaseResponse):
     vtt_path: str
     uuid: str
 
-# class TranslationResponse(BaseResponse):
-#     id: int
-#     lemma: str
-#     pos: str
-#     translation: str
-#     sentence: str
 
-# class StatisticsResponse(BaseResponse):
-#     number_sentences: int
-#     number_words: int
-#
-#
-# class GapFillingResponse(BaseResponse):
-#     id: int
-#     id_in_translation_model: int
-#     gapped_sentence: str
-#     options: list[str]
-#     correct_frequency: int
+class StatisticsResponse(BaseResponse):
+    number_sentences: int
+    number_words: int
+
+
+class GapFillingResponse(BaseResponse):
+    id: int
+    id_in_translation_model: int
+    gapped_sentence: str
+    options: list[str]
+    correct_frequency: int
+    incorrect_frequency: int
+
+
+class VideoChosenWordsResponse(BaseResponse):
+    # word_id, marked_as_learned, lemma, translation, sentence
+    chosen_words: List[Tuple[int, bool, str, str | None, str, datetime]]

@@ -6,31 +6,27 @@ class BaseRequest(BaseModel):
     pass
 
 
-# class RefreshTokenRequest(BaseRequest):
-#     refresh_token: str
-#
-#
-
-
 class UserRequest(BaseRequest):
-    uuid: str  # the user's uuid from localStorage if exists, else null
+    uuid: str  # the user's uuid from localStorage if exists, else create a new user
 
 
 class VideoRequest(BaseModel):
     video_url: str
-    uuid: str
 
 
-class TranslationRequest(BaseRequest):
-    uuid: str
-    word: str
-    sentence: str
-
-# class StatisticsRequest(BaseRequest):
+# class TranslationRequest(BaseRequest):
 #     uuid: str
-#     text: str
-#
-#
-# class CorrectnessUpdateRequest(BaseModel):
-#     uuid: str
-#     is_correct: bool
+#     word: str
+#     sentence: str
+
+
+class CorrectnessUpdateRequest(BaseModel):
+    # Define the fields for CorrectnessUpdateRequest
+    word_id: int  # to look for the node to increase the mastery score
+    is_correct: bool
+
+
+class VideoChosenWordsRequest(BaseRequest):
+    video_id: int
+    start_time: str
+    end_time: str
