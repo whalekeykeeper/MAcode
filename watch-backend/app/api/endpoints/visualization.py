@@ -1,10 +1,17 @@
 # visualization.py
 
+from typing import List, Dict, Any
+
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi import Body
+from fastapi import Header
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
+from sqlalchemy import and_
 
 from app.api import deps
+from app.core.logger import logger
+from app.models import Graph, GraphNode, GraphEdge, User, Line
 
 """
 This file contains the API endpoints for visualizing the user's vocabulary graph.
@@ -22,14 +29,22 @@ the line automatically.
 router = APIRouter()
 
 
-@router.get("/{user_id}")
-async def get_graph_data(user_id: int, session: AsyncSession = Depends(deps.get_session)):
-    graph = (await session.execute(select(Graph).where(Graph.user_id == user_id))).scalar_one_or_none()
-    if not graph:
-        raise HTTPException(status_code=404, detail="Graph not found")
+@router.get("/")
+async def get_graph_data(uuid: str = Header(...),
+                         session: AsyncSession = Depends(deps.get_session)) \
+        -> Dict[str, List[Dict[str, Any]]]:
+    stmt = select(User).where(User.uuid == uuid)
+    user = (await session.execute(stmt)).scalar_one_or_none()
 
-    nodes = await session.execute(select(GraphNode).where(GraphNode.graph_id == graph.id))
-    edges = await session.execute(select(GraphEdge).where(GraphEdge.graph_id == graph.id))
+    graph = (await session.execute(select(Graph).where(Graph.user_id == user.id))).scalar_one_or_none()
+    if not graph:
+        raise HTTPException(status_code=404, detail="Graph not found for visualization")
+
+    nodes_result = await session.execute(select(GraphNode).where(GraphNode.graph_id == graph.id))
+    edges_result = await session.execute(select(GraphEdge).where(GraphEdge.graph_id == graph.id))
+
+    nodes = nodes_result.scalars().all()
+    edges = edges_result.scalars().all()
 
     return {
         "nodes": [{"id": node.id, "lemma": node.lemma, "mastery": node.mastery} for node in nodes],
@@ -37,11 +52,28 @@ async def get_graph_data(user_id: int, session: AsyncSession = Depends(deps.get_
     }
 
 
-@router.get("/node/{node_id}/lines")
-async def get_lines_for_node(node_id: int, session: AsyncSession = Depends(deps.get_session)):
+@router.get("/node/lines")
+async def get_lines_for_node(uuid: str = Header(...),
+                             node_id: int = Body(..., embed=True),
+                             session: AsyncSession = Depends(deps.get_session)) -> List[Dict[str, Any]]:
+    stmt = select(User).where(User.uuid == uuid)
+    user = (await session.execute(stmt)).scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid user in visualization")
+
     node = (await session.execute(select(GraphNode).where(GraphNode.id == node_id))).scalar_one_or_none()
     if not node:
         raise HTTPException(status_code=404, detail="Node not found")
 
-    lines = (await session.execute(select(Line).where(Line.id.in_(node.word_ids)))).scalars().all()
-    return [{"start": line.start_timestamp, "end": line.end_timestamp, "text": line.line_text} for line in lines]
+    lines = (await session.execute(
+        select(Line).where(
+            and_(
+                Line.id.in_(node.word_ids),
+                Line.language == "en"
+            )
+        )
+    )).scalars().all()
+    
+    logger.debug(f"Found {len(lines)} lines for node {node.lemma}")
+    return [{"video_id": line.video_id, "start": line.start_timestamp, "end": line.end_timestamp,
+             "text": line.line_text} for line in lines]
