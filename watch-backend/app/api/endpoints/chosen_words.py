@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api import deps
 from app.core.logger import logger
-from app.models import ChosenWords, GraphNode, User
+from app.models import ChosenWords, GraphNode, User, Graph
 
 """
 This file contains endpoints to show a collection of words as a table. Word data is sent with word id.
@@ -42,8 +42,13 @@ async def get_word_list(
         for chosen_word in chosen_word_list:
             if chosen_word.marked_as_learned:  # If the word is marked as learned, skip it.
                 continue
+            stmt = select(Graph).where(Graph.user_id == user_id)
+            graph = (await session.execute(stmt)).scalar_one_or_none()
+            if not graph:
+                raise ValueError(
+                    f"Graph not found for user {user_id} when update_chosen_in_database.")
 
-            stmt = select(GraphNode).where(GraphNode.lemma == chosen_word.lemma)
+            stmt = select(GraphNode).where(GraphNode.lemma == word.lemma, GraphNode.graph_id == graph.id)
             graph_node = (await session.execute(stmt)).scalar_one_or_none()
 
             display_word_list.append(
@@ -91,7 +96,13 @@ async def mark_as_required(
         logger.debug(f"Marked word {chosen_word.lemma} is marked_as_learned: {chosen_word.marked_as_learned}.")
 
         logger.debug(f"-----------------Updating the graph-----------------")
-        stmt = select(GraphNode).where(GraphNode.lemma == chosen_word.lemma)
+        stmt = select(Graph).where(Graph.user_id == user.id)
+        graph = (await session.execute(stmt)).scalar_one_or_none()
+        if not graph:
+            raise ValueError(
+                f"Graph not found for user {user_id} when update_chosen_in_database.")
+
+        stmt = select(GraphNode).where(GraphNode.lemma == word.lemma, GraphNode.graph_id == graph.id)
         graph_node = (await session.execute(stmt)).scalar_one_or_none()
         if not graph_node:
             raise HTTPException(status_code=404, detail="Graph node not found in mark_as_required()")
@@ -106,7 +117,13 @@ async def mark_as_required(
         await session.flush()
         await session.commit()
 
-        stmt = select(GraphNode).where(GraphNode.lemma == chosen_word.lemma)
+        stmt = select(Graph).where(Graph.user_id == user.id)
+        graph = (await session.execute(stmt)).scalar_one_or_none()
+        if not graph:
+            raise ValueError(
+                f"Graph not found for user {user_id} when update_chosen_in_database.")
+
+        stmt = select(GraphNode).where(GraphNode.lemma == word.lemma, GraphNode.graph_id == graph.id)
         graph_node = (await session.execute(stmt)).scalar_one_or_none()
         logger.debug(f"graph_node {graph_node.lemma} is acquired: {graph_node.acquired}, "
                      f"the new mastery is {graph_node.mastery}.")
