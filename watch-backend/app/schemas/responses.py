@@ -32,20 +32,21 @@ class VideoResponse(BaseResponse):
     uuid: str
 
 
-class StatisticsResponse(BaseResponse):
-    number_sentences: int
-    number_words: int
-
-
-class GapFillingResponse(BaseResponse):
-    id: int
-    id_in_translation_model: int
-    gapped_sentence: str
-    options: list[str]
-    correct_frequency: int
-    incorrect_frequency: int
+class GapFillingResponse(BaseModel):
+    user_id: int
+    exercise_id: int
+    node_id: int
+    correct_answer_lemma: str
+    word_text_masked_sentence_list: List[Tuple[str, List[str]]]  # [(word_text, masked_sentence), ...]
+    distractors: List[str]
 
 
 class VideoChosenWordsResponse(BaseResponse):
-    # word_id, marked_as_learned, lemma, translation, sentence
+    # word_id, marked_as_learned, lemma, translation, sentence, record time
     chosen_words: List[Tuple[int, bool, str, str | None, str, datetime]]
+
+
+class ExerciseResultUpdateResponse(BaseResponse):
+    exercise_amount: int
+    correct_amount: int
+    correct_rate: float
