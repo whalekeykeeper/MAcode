@@ -5,9 +5,9 @@ from typing import List, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi import Body
 from fastapi import Header
+from sqlalchemy import and_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from sqlalchemy import and_
 
 from app.api import deps
 from app.core.logger import logger
@@ -52,15 +52,11 @@ async def get_graph_data(uuid: str = Header(...),
     }
 
 
+# TODO: fix the bug in this endpoint that some node doesn' return any lines which is definitely wrong
 @router.get("/node/lines")
 async def get_lines_for_node(uuid: str = Header(...),
                              node_id: int = Body(..., embed=True),
                              session: AsyncSession = Depends(deps.get_session)) -> List[Dict[str, Any]]:
-    stmt = select(User).where(User.uuid == uuid)
-    user = (await session.execute(stmt)).scalar_one_or_none()
-    if not user:
-        raise HTTPException(status_code=401, detail="Invalid user in visualization")
-
     node = (await session.execute(select(GraphNode).where(GraphNode.id == node_id))).scalar_one_or_none()
     if not node:
         raise HTTPException(status_code=404, detail="Node not found")
@@ -73,7 +69,7 @@ async def get_lines_for_node(uuid: str = Header(...),
             )
         )
     )).scalars().all()
-    
+
     logger.debug(f"Found {len(lines)} lines for node {node.lemma}")
     return [{"video_id": line.video_id, "start": line.start_timestamp, "end": line.end_timestamp,
              "text": line.line_text} for line in lines]
