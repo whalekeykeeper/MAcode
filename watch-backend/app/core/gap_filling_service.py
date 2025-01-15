@@ -1,7 +1,18 @@
 # Description: Service for generating gap-filling exercises based on a user's graph.
+import random
+from typing import Dict, Any, List, Tuple
+
+import networkx as nx
+import spacy
+from networkx.exception import NetworkXNoPath
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-MOCK_OPTIONS = ["option1", "option2", "option3"]
+from app.core.logger import logger
+from app.models import GapFillingTable
+from app.models import GraphEdge
+from app.models import Word, Line, Sentence, GraphNode
+from app.schemas.responses import GapFillingResponse
 
 
 # def generate_prompt(self, row):
@@ -35,45 +46,70 @@ MOCK_OPTIONS = ["option1", "option2", "option3"]
 #     model = genai.GenerativeModel('gemini-pro')
 #     response = model.generate_content(prompt)
 #     return response.text
-#
-async def generate_gap_filling_exercises(user_id: int, session: AsyncSession, exercise_number: int = 10):
+
+async def generate_gap_filling_exercises(user_id: int, graph_id: int, session: AsyncSession,
+                                         exercise_number: int = 10) -> List[GapFillingResponse]:
     """
     Generate gap-filling exercises by randomly selecting nodes from the top candidates.
 
     Args:
-        user_id (int): The ID of the user.
+        user_id (int): The user id.
+        graph_id (int): The graph id of the user.
         session (AsyncSession): The database session.
         exercise_number (int): Number of exercises to generate. Defaults to 10.
 
     Returns:
-        list: A list of exercises with node data and masked sentences.
+        list: A list of GapFillingResponse objects.
     """
-    top_candidates = await find_top_candidates(user_id, session, exercise_number=exercise_number)
+    top_candidates = await find_top_candidates(graph_id, session, exercise_number=exercise_number)
     chosen_nodes = random.sample(list(top_candidates.keys()), k=min(exercise_number, len(top_candidates)))
 
     exercises = []
-    for node_id in chosen_nodes:
-        chosen_node = top_candidates[node_id]
-        masked_sentences = create_masked_sentence(chosen_node)
-        distractors = create_distractors(chosen_node, masked_sentences)
-        exercises.append({
-            "node_data": chosen_node["node_data"],
-            "masked_sentences": masked_sentences,
-            "distractors": distractors
-        })
 
+    for node_id in chosen_nodes:
+        node = top_candidates[node_id]
+        logger.debug(f"-------Chosen node: {top_candidates[node_id]['lemma']}")
+
+        # todo：it should be the case that for one node, three sentnces, not for each unique word_text, debug for this
+        #  issue
+        text_sentences = await create_masked_sentence(node, session)
+        distractors = await create_distractors(node, graph_id, session)
+
+        gap_filling_entry = GapFillingTable(
+            user_id=user_id,
+            node_id=node_id,
+            correct_answer_lemma=node["lemma"],
+            word_text_masked_sentence_list=text_sentences,
+            distractors=distractors,
+        )
+        session.add(gap_filling_entry)
+        await session.flush()
+
+        exercise = GapFillingResponse(
+            exercise_id=gap_filling_entry.id,
+            user_id=user_id,
+            node_id=node_id,
+            correct_answer_lemma=node["lemma"],
+            word_text_masked_sentence_list=text_sentences,
+            # A list of dictionaries, for each dictionary, the keys are word_text and masked_sentences.
+            distractors=distractors, )
+        exercises.append(exercise)
+
+    await session.commit()
+    logger.debug(f"========Exercises: {exercises}")
     return exercises
 
 
-async def find_top_candidates(user_id: int,
+async def find_top_candidates(graph_id: int,
                               session: AsyncSession,
                               mastery_threshold: float = 0.8,
-                              exercise_number: int = 10):
+                              exercise_number: int = 1):  # TODO: exercise_number default value is 10, set to 1 for
+    # testing
     """
     Finds the top candidate nodes closest to the graph's center with mastery below a threshold and not acquired.
 
     Args:
-        user_id (int): The ID of the user.
+        graph_id (int): The graph ID of the user.
         session (AsyncSession): The database session.
         mastery_threshold (float): Mastery score threshold. Defaults to 0.8.
         exercise_number (int): Number of top nodes to consider as candidates. Defaults to 10.
@@ -81,14 +117,15 @@ async def find_top_candidates(user_id: int,
     Returns:
         dict: A dictionary containing node data and their associated sentences.
     """
-    closeness_centrality = await get_closeness_centrality(user_id, session)
+    closeness_centrality = await get_closeness_centrality(graph_id, session)
 
     # Fetch graph nodes and sentences
-    stmt = select(GraphNode).where(GraphNode.graph_id == user_id)
+    stmt = select(GraphNode).where(GraphNode.graph_id == graph_id)
     nodes = (await session.execute(stmt)).scalars().all()
 
     node_data = {
         node.id: {
+            "graph_id": node.graph_id,
             "lemma": node.lemma,
             "mastery": node.mastery,
             "word_ids": node.word_ids,
@@ -98,47 +135,37 @@ async def find_top_candidates(user_id: int,
     }
 
     # Filter nodes based on mastery threshold and acquired status
-    eligible_nodes = [
-                         node_id
-                         for node_id, centrality in sorted(closeness_centrality.items(), key=lambda x: -x[1])
-                         if node_data[node_id]["mastery"] < mastery_threshold and not node_data[node_id]["acquired"]
-                     ][:exercise_number]
+    eligible_nodes = [node_id for node_id, centrality in sorted(closeness_centrality.items(), key=lambda x: -x[1])
+                      if node_data[node_id]["mastery"] < mastery_threshold and not node_data[node_id]["acquired"]
+                      ][:exercise_number]
+    logger.debug(f"---------\nEligible nodes: {eligible_nodes}")
 
-    # Fetch sentences associated with the top nodes
+    # Basing on eligible_nodes, return dictionary of node_data
     top_candidates_data = {}
     for node_id in eligible_nodes:
-        word_ids = node_data[node_id]["word_ids"]
-        stmt = select(Sentence).where(Sentence.line_ids.contains(word_ids))
-        sentences = (await session.execute(stmt)).scalars().all()
-        top_candidates_data[node_id] = {
-            "node_data": node_data[node_id],
-            "sentences": [sentence.sentence_text for sentence in sentences]
-        }
+        top_candidates_data[node_id] = node_data[node_id]
+
+    top_candidates_lemmas = [v["lemma"] for k, v in top_candidates_data.items()]
+    logger.debug(f"---------\nTop candidates: {top_candidates_lemmas}")
 
     return top_candidates_data
 
 
-async def get_closeness_centrality(user_id: int, session: AsyncSession):
+async def get_closeness_centrality(graph_id: int, session: AsyncSession):
     """
     Computes the closeness centrality of nodes in a user's graph.
 
     Args:
-        user_id (int): The ID of the user.
+        graph_id (int): The graph ID of the user.
         session (AsyncSession): The database session.
 
     Returns:
         dict: A dictionary of node IDs and their closeness centrality.
     """
-    stmt = select(Graph).where(Graph.user_id == user_id)
-    graph_entry = (await session.execute(stmt)).scalar_one_or_none()
-
-    if not graph_entry:
-        raise ValueError(f"No graph found for user ID {user_id}.")
-
-    stmt = select(GraphNode).where(GraphNode.graph_id == graph_entry.id)
+    stmt = select(GraphNode).where(GraphNode.graph_id == graph_id)
     nodes = (await session.execute(stmt)).scalars().all()
 
-    stmt = select(GraphEdge).where(GraphEdge.graph_id == graph_entry.id)
+    stmt = select(GraphEdge).where(GraphEdge.graph_id == graph_id)
     edges = (await session.execute(stmt)).scalars().all()
 
     network = nx.Graph()
@@ -153,42 +180,187 @@ async def get_closeness_centrality(user_id: int, session: AsyncSession):
     return closeness_centrality
 
 
-def create_masked_sentence(chosen_node):
+async def create_masked_sentence(chosen_node: Dict[str, Any], session: AsyncSession) -> List[Tuple[str, str]]:
     """
-    Create masked sentences for a chosen node by masking the words corresponding to its word IDs.
+    Create masked sentences for one chosen node by masking the words.
+    For each node, we find the unique word_texts and then find all sentences containing that word.
+    We then mask the word_text in each sentence.
+    At the end, we mix all the masked sentences for the same node (with corresponding word_text) and return random
+    three if there are three, otherwise, return all.
 
     Args:
-        chosen_node (dict): The data of the chosen node.
-
+        chosen_node (Dict[str, Any]): The chosen node data. It has two keys: "node_data" and "sent_text".
+        session (AsyncSession): The database session.
     Returns:
-        list: A list of masked sentences.
+        List[Tuple(str, str)]: A list of randomly-chose, maximal 3 tuples, each containing a word_text and a masked
+        sentence.
     """
-    sentences = chosen_node["sentences"]
-    word_ids = set(chosen_node["node_data"]["word_ids"])
+    # Load the Spacy model for tokenization
+    nlp_en = spacy.load("en_core_web_lg")
 
-    # TODO: If a sentence has multiple occurrences of the same word, mask only the first occurrence.
-    masked_sentences = []
-    for sentence in sentences[:3]:
-        words = sentence.split()
-        masked_sentence = " ".join(
-            ["_____" if str(word_id) in word_ids else word for word_id, word in enumerate(words)])
-        masked_sentences.append(masked_sentence)
+    # Step 1: Gather unique word_texts from the given word_ids
+    word_texts = set()
+    for word_id in chosen_node["word_ids"]:
+        word_stmt = select(Word).where(Word.id == word_id)
+        word = (await session.execute(word_stmt)).scalar_one_or_none()
+        if word:
+            word_texts.add(word.word)
 
-    return masked_sentences
+    # Step 2: For each unique word_text, find all sentences containing that word
+    word_text_masked_sentence_dict = {}
+    for word_text in word_texts:
+        # Find all words with the same word_text
+        words_stmt = select(Word).where(Word.word == word_text)
+        words = (await session.execute(words_stmt)).scalars().all()
+
+        # Collect all sentences for these words
+        sentences = set()
+        for word in words:
+            line_stmt = select(Line).where(Line.id == word.line_id)
+            line = (await session.execute(line_stmt)).scalar_one_or_none()
+            if line:
+                sentence_stmt = select(Sentence).where(Sentence.id == line.sentence_id)
+                sentence = (await session.execute(sentence_stmt)).scalar_one_or_none()
+                if sentence:
+                    sentences.add(sentence.sentence_text)
+
+        # Mask the word_text in each sentence
+        masked_sentences = []
+        for sentence_text in sentences:
+            doc = nlp_en(sentence_text)
+            masked_sentence = [
+                "____" if token.text.strip().lower() == word_text.strip().lower() else token.text
+                for token in doc
+            ]
+            masked_sentences.append(" ".join(masked_sentence))
+        word_text_masked_sentence_dict[word_text] = masked_sentences
+
+    # Step 3: Randomly select 3 masked sentences from all word_text
+    text_sentences = []
+    for key, value in word_text_masked_sentence_dict.items():
+        text_sentences.append((key, value))
+
+    # Randomly select 3 from text_sentences if there are 3, otherwise return all
+    if len(text_sentences) >= 3:
+        return random.sample(text_sentences, 3)
+    else:
+        return random.sample(text_sentences, len(text_sentences))
 
 
-def create_distractors(chosen_node, masked_sentences):
-    # TODO: Implement distractor generation based on the node's part of speech and context.
-    return [MOCK_OPTIONS for _ in masked_sentences]
+async def create_distractors(chosen_node: Dict[str, Any], graph_id: int, session: AsyncSession,
+                             num_distractors: int = 3) -> List[str]:
+    """
+    Generate distractors for a gap-filling exercise by finding nodes at increasing edge distances.
+    
+    Args:
+        chosen_node (Dict[str, Any]): The node for which to generate distractors
+        graph_id (int): The graph ID
+        session (AsyncSession): Database session
+        num_distractors (int): Number of distractors to generate (default: 3)
+    
+    Returns:
+        List[str]: List of distractor lemmas
+    """
+    # Get the graph structure
+    stmt = select(GraphNode).where(GraphNode.graph_id == graph_id)
+    nodes = (await session.execute(stmt)).scalars().all()
+
+    stmt = select(GraphEdge).where(GraphEdge.graph_id == graph_id)
+    edges = (await session.execute(stmt)).scalars().all()
+
+    # Create NetworkX graph
+    G = nx.Graph()
+    node_map = {}  # Map node IDs to their data
+    for node in nodes:
+        G.add_node(node.id)
+        node_map[node.id] = {
+            "lemma": node.lemma,
+            "mastery": node.mastery,
+            "acquired": node.acquired
+        }
+
+    for edge in edges:
+        G.add_edge(edge.node1_id, edge.node2_id)
+
+    target_node_id = chosen_node["graph_id"]
+    distractors = []
+    current_distance = 2  # Start from distance 2 (skipping immediate neighbors)
+    max_attempts = 5  # Limit the number of attempts to find a path
+
+    attempts = 0
+    while len(distractors) < num_distractors and attempts < max_attempts:
+        try:
+            # Get nodes at current distance
+            nodes_at_distance = set()
+            for node in G.nodes():
+                if nx.shortest_path_length(G, target_node_id, node) == current_distance:
+                    nodes_at_distance.add(node)
+
+            # Sort nodes by mastery score (now also filtering out acquired nodes)
+            candidate_nodes = [
+                (node_id, node_map[node_id])
+                for node_id in nodes_at_distance
+                if node_map[node_id]["mastery"] < 0.8 and not node_map[node_id]["acquired"]
+            ]
+            candidate_nodes.sort(key=lambda x: x[1]["mastery"])
+
+            # Add candidates to distractors
+            needed = num_distractors - len(distractors)
+            for _, node_data in candidate_nodes[:needed]:
+                distractors.append(node_data["lemma"])
+
+            if not nodes_at_distance or current_distance > len(G.nodes):
+                # If we've exhausted connected nodes or can't find more,
+                # fill remaining slots with random nodes from the graph
+                remaining_needed = num_distractors - len(distractors)
+                if remaining_needed > 0:
+                    # Get all eligible nodes not already selected (now also filtering out acquired nodes)
+                    all_eligible = [
+                        node_map[node_id]["lemma"]
+                        for node_id in G.nodes()
+                        if node_map[node_id]["mastery"] < 0.8
+                           and not node_map[node_id]["acquired"]  # Added acquired check
+                           and node_map[node_id]["lemma"] not in distractors
+                           and node_id != target_node_id
+                    ]
+
+                    # Add random selections
+                    random_selections = random.sample(
+                        all_eligible,
+                        min(remaining_needed, len(all_eligible))
+                    )
+                    distractors.extend(random_selections)
+                break
+
+            current_distance += 1
+
+        except NetworkXNoPath:
+            logger.warning(
+                f"No path found between node {target_node_id} and some nodes at distance {current_distance}.")
+            # Handle the case where no path is found
+            # You might want to skip this distance or use a fallback strategy
+            current_distance += 1
+            attempts += 1
+
+    # If after max_attempts no path is found, choose random nodes
+    if attempts >= max_attempts and len(distractors) < num_distractors:
+        remaining_needed = num_distractors - len(distractors)
+        all_eligible = [
+            node_map[node_id]["lemma"]
+            for node_id in G.nodes()
+            if node_map[node_id]["mastery"] < 0.8
+               and not node_map[node_id]["acquired"]
+               and node_map[node_id]["lemma"] not in distractors
+               and node_id != target_node_id
+        ]
+        random_selections = random.sample(
+            all_eligible,
+            min(remaining_needed, len(all_eligible))
+        )
+        distractors.extend(random_selections)
+
+    return distractors[:num_distractors]
 
 
-def save_exercise():
-    pass
-
-
-def fetch_gap_filling_exercises(user_id: int, session: AsyncSession):
-    pass
-
-
-def update_exercise_correctness(user_id: int, session: AsyncSession):
+if __name__ == '__main__':
     pass

@@ -1,12 +1,12 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Header
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api import deps
-from app.core.gap_filling_service import (
-    fetch_gap_filling_exercises,
-    update_exercise_correctness, generate_gap_filling_exercises,
-)
-from app.schemas.requests import CorrectnessUpdateRequest
+from app.core.gap_filling_service import generate_gap_filling_exercises
+from app.core.logger import logger
+from app.models import User, Graph, GapFillingTable, GraphNode
+from app.schemas.requests import ExerciseResultUpdateRequest
 from app.schemas.responses import GapFillingResponse
 
 router = APIRouter()
@@ -47,34 +47,83 @@ Frontend task: display the failed exercises to the user.
 """
 
 
-@router.get("/", response_model=list[GapFillingResponse], status_code=200)
-async def get_gap_filling_exercises(session: AsyncSession = Depends(deps.get_session)):
-    """
-    Fetch all gap-filling exercises.
-    """
-    return await fetch_gap_filling_exercises(session)
-
-
-@router.post("/generate", response_model=list[GapFillingResponse], status_code=201)
-async def generate_exercises(session: AsyncSession = Depends(deps.get_session)):
-    """
-    Generate gap-filling exercises from translations.
-    """
-    return await generate_gap_filling_exercises(session)
-
-
-@router.post("/{exercise_id}/correct", status_code=200)
-async def mark_exercise_as_correct(
-        exercise_id: int,
-        request: CorrectnessUpdateRequest,
+@router.get("/", response_model=list[GapFillingResponse], status_code=201)
+async def generate_exercises(
+        uuid: str = Header(...),
         session: AsyncSession = Depends(deps.get_session),
 ):
     """
-    Update correctness frequency for a specific exercise.
+    Generate multi-gap-filling exercises, update GapFilling table,
+    and send the exercises in ready-order to the frontend.
     """
-    updated_exercise = await update_exercise_correctness(
-        session, exercise_id, request.is_correct
-    )
-    if updated_exercise is None:
-        raise HTTPException(status_code=404, detail="Exercise not found")
-    return {"message": "Exercise updated successfully", "exercise_id": exercise_id}
+    stmt = select(User).where(User.uuid == uuid)
+    user = (await session.execute(stmt)).scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid user when generating gap-filling exercises")
+
+    stmt = select(Graph).where(Graph.user_id == user.id)
+    graph = (await session.execute(stmt)).scalar_one_or_none()
+    if not graph:
+        raise HTTPException(status_code=401, detail="Invalid graph when generating gap-filling exercises")
+
+    logger.info(f"Generating gap-filling exercises for user {user.id} and graph {graph.id}")
+    exercises = await generate_gap_filling_exercises(user.id, graph.id, session)
+
+    return exercises
+
+
+@router.post("/result", status_code=201)
+async def exercise_result_update(
+        exercise_results: list[ExerciseResultUpdateRequest],
+        uuid: str = Header(...),
+        session: AsyncSession = Depends(deps.get_session),
+):
+    """
+    Frontend sends user's answers to the backend to update the according mastery score in GraphNode table.
+    And return the statistics to the frontend.
+    """
+    stmt = select(User).where(User.uuid == uuid)
+    user = (await session.execute(stmt)).scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid user when updating exercise results")
+
+    stmt = select(Graph).where(Graph.user_id == user.id)
+    graph = (await session.execute(stmt)).scalar_one_or_none()
+    if not graph:
+        raise HTTPException(status_code=401, detail="Invalid graph when generating exercise results")
+
+    # Update the GraphNode table and the GapFilling table
+    correct_number = 0
+    for exercise in exercise_results:
+        if exercise.is_correct:
+            change_mastery_score = 0.3
+            is_correct = True
+            correct_number += 1
+        else:
+            change_mastery_score = -0.3
+            is_correct = False
+
+        stmt = select(GraphNode).where(GraphNode.node_id == exercise.node_id)
+        node = (await session.execute(stmt)).scalar_one_or_none()
+        if not node:
+            raise HTTPException(status_code=404, detail="Node not found when updating exercise results")
+        node.mastery_score += change_mastery_score
+        session.add(node)
+        await session.flush()
+
+        stmt = select(GapFillingTable).where(GapFillingTable.exercise_id == exercise.exercise_id)
+        gap_filling = (await session.execute(stmt)).scalar_one_or_none()
+        if not gap_filling:
+            raise HTTPException(status_code=404, detail="GapFilling table not found when updating exercise results")
+        gap_filling.is_correct = is_correct
+        session.add(gap_filling)
+        await session.flush()
+    correct_rate = correct_number / len(exercise_results)
+    response = ExerciseResultUpdateResponse({
+        "exercise_amount": len(exercise_results),
+        "correct_amount": correct_number,
+        "correct_rate": correct_rate
+    })
+    logger.info(f"User {user.id} updated {len(exercise_results)} exercises, {correct_number} correct, "
+                f"correct rate: {correct_rate}")
+    return response
