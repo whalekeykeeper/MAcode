@@ -15,6 +15,7 @@
 # alembic upgrade head
 
 from datetime import datetime
+from typing import List
 from uuid import uuid4
 
 from sqlalchemy import (
@@ -272,15 +273,9 @@ class GapFillingTable(Base):
     __tablename__ = "gap_filling_model"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-
-    word_pos_pair: Mapped[dict] = mapped_column(
-        JSON, nullable=False
-    )  # Store as JSON for word-pos pair
-
-    gapped_sentences: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
-    distractors: Mapped[list] = mapped_column(
-        JSON, nullable=False, default=list
-    )  # Store as JSON for distractors
-
     user_id: Mapped[int] = mapped_column(ForeignKey("user_model.id"), nullable=False)
-    correct: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    node_id: Mapped[int] = mapped_column(ForeignKey("graph_node.id"), nullable=False)
+    correct_answer_lemma: Mapped[str] = mapped_column(String(50), nullable=False)
+    word_text_masked_sentence_list: Mapped[List] = mapped_column(JSON, nullable=False)
+    distractors: Mapped[List[str]] = mapped_column(JSON, nullable=False, default=list)
+    correct_or_not: Mapped[bool] = mapped_column(Boolean, nullable=True, default=None)
