@@ -276,6 +276,6 @@ class GapFillingTable(Base):
     user_id: Mapped[int] = mapped_column(ForeignKey("user_model.id"), nullable=False)
     node_id: Mapped[int] = mapped_column(ForeignKey("graph_node.id"), nullable=False)
     correct_answer_lemma: Mapped[str] = mapped_column(String(50), nullable=False)
-    word_text_masked_sentence_list: Mapped[List] = mapped_column(JSON, nullable=False)
+    selected_dictionary: Mapped[dict] = mapped_column(JSON, nullable=False)
     distractors: Mapped[List[str]] = mapped_column(JSON, nullable=False, default=list)
     correct_or_not: Mapped[bool] = mapped_column(Boolean, nullable=True, default=None)

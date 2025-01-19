@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Tuple, List
+from typing import Tuple, List, Dict
 
 from pydantic import BaseModel, ConfigDict
 
@@ -37,7 +37,7 @@ class GapFillingResponse(BaseModel):
     exercise_id: int
     node_id: int
     correct_answer_lemma: str
-    word_text_masked_sentence_list: List[Tuple[str, List[str]]]  # [(word_text, masked_sentence), ...]
+    selected_dictionary: Dict[str, List[str]]
     distractors: List[str]
 
 

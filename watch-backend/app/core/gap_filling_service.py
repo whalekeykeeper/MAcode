@@ -1,6 +1,6 @@
 # Description: Service for generating gap-filling exercises based on a user's graph.
 import random
-from typing import Dict, Any, List, Tuple
+from typing import Dict, Any, List
 
 import networkx as nx
 import spacy
@@ -47,6 +47,7 @@ from app.schemas.responses import GapFillingResponse
 #     response = model.generate_content(prompt)
 #     return response.text
 
+
 async def generate_gap_filling_exercises(user_id: int, graph_id: int, session: AsyncSession,
                                          exercise_number: int = 10) -> List[GapFillingResponse]:
     """
@@ -72,14 +73,14 @@ async def generate_gap_filling_exercises(user_id: int, graph_id: int, session: A
 
         # todo：it should be the case that for one node, three sentnces, not for each unique word_text, debug for this
         #  issue
-        text_sentences = await create_masked_sentence(node, session)
+        selected_dictionary = await create_masked_sentence(node, session)
         distractors = await create_distractors(node, graph_id, session)
 
         gap_filling_entry = GapFillingTable(
             user_id=user_id,
             node_id=node_id,
             correct_answer_lemma=node["lemma"],
-            word_text_masked_sentence_list=text_sentences,
+            selected_dictionary=selected_dictionary,
             distractors=distractors,
         )
         session.add(gap_filling_entry)
@@ -90,8 +91,7 @@ async def generate_gap_filling_exercises(user_id: int, graph_id: int, session: A
             user_id=user_id,
             node_id=node_id,
             correct_answer_lemma=node["lemma"],
-            word_text_masked_sentence_list=text_sentences,
-            # A list of dictionaries, for each dictionary, the keys are word_text and masked_sentences.
+            selected_dictionary=selected_dictionary,
             distractors=distractors, )
         exercises.append(exercise)
 
@@ -180,20 +180,19 @@ async def get_closeness_centrality(graph_id: int, session: AsyncSession):
     return closeness_centrality
 
 
-async def create_masked_sentence(chosen_node: Dict[str, Any], session: AsyncSession) -> List[Tuple[str, str]]:
+async def create_masked_sentence(chosen_node: Dict[str, Any], session: AsyncSession) -> Dict[str, List[str]]:
     """
     Create masked sentences for one chosen node by masking the words.
     For each node, we find the unique word_texts and then find all sentences containing that word.
     We then mask the word_text in each sentence.
-    At the end, we mix all the masked sentences for the same node (with corresponding word_text) and return random
-    three if there are three, otherwise, return all.
+    At the end, we mix all the masked sentences for the same node (with corresponding word_text) and return random three if there are three, otherwise, return all.
 
     Args:
         chosen_node (Dict[str, Any]): The chosen node data. It has two keys: "node_data" and "sent_text".
         session (AsyncSession): The database session.
     Returns:
-        List[Tuple(str, str)]: A list of randomly-chose, maximal 3 tuples, each containing a word_text and a masked
-        sentence.
+        select_dictionary: A dictionary with word_text as key and masked_sentences as value.
+       
     """
     # Load the Spacy model for tokenization
     nlp_en = spacy.load("en_core_web_lg")
@@ -225,6 +224,7 @@ async def create_masked_sentence(chosen_node: Dict[str, Any], session: AsyncSess
                     sentences.add(sentence.sentence_text)
 
         # Mask the word_text in each sentence
+        # TODO: we put sentence's texts into a list directly, but in the future, we should use sentence_id here to reduce the size of the data.
         masked_sentences = []
         for sentence_text in sentences:
             doc = nlp_en(sentence_text)
@@ -235,16 +235,46 @@ async def create_masked_sentence(chosen_node: Dict[str, Any], session: AsyncSess
             masked_sentences.append(" ".join(masked_sentence))
         word_text_masked_sentence_dict[word_text] = masked_sentences
 
-    # Step 3: Randomly select 3 masked sentences from all word_text
-    text_sentences = []
-    for key, value in word_text_masked_sentence_dict.items():
-        text_sentences.append((key, value))
-
-    # Randomly select 3 from text_sentences if there are 3, otherwise return all
-    if len(text_sentences) >= 3:
-        return random.sample(text_sentences, 3)
+    word_text_num = len(word_text_masked_sentence_dict.keys())
+    select_dictionary = {}
+    if word_text_num == 1:
+        if len(word_text_masked_sentence_dict.values()) <= 3:
+            # We choose all the sentences
+            select_dictionary = word_text_masked_sentence_dict
+            return select_dictionary
+        else:
+            # We choose 3 random sentences
+            for k, v in word_text_masked_sentence_dict.items():
+                select_dictionary[k] = random.sample(v, 3)
+                return select_dictionary
+    elif word_text_num == 2:
+        remaining_sentences = {}
+        for word_text in word_text_masked_sentence_dict.keys():
+            # We shuffle the sentences for each word_text
+            random.shuffle(word_text_masked_sentence_dict[word_text])
+            # choose one sentence from all the sentences for each word_text, keep the remaining sentences,
+            # and then choose one sentence randomly from the remaining sentences
+            select_dictionary[word_text] = [word_text_masked_sentence_dict[word_text][0]]
+            if len(word_text_masked_sentence_dict[word_text]) > 1:
+                remaining_sentences[word_text] = word_text_masked_sentence_dict[word_text][1:]
+                t = type(word_text_masked_sentence_dict[word_text][1:])
+                logger.debug(f"===========word_text_masked_sentence_dict[word_text][1:] type: {t}")
+        for word_text in remaining_sentences.keys():
+            select_dictionary[word_text] = random.sample(list(remaining_sentences), 1)
+        return select_dictionary
+    elif word_text_num == 3:
+        # We shuffle the sentences for each word_text, choose one sentence for each word_text
+        for word_text in word_text_masked_sentence_dict.keys():
+            random.shuffle(word_text_masked_sentence_dict[word_text])
+            select_dictionary[word_text] = [word_text_masked_sentence_dict[word_text][0]]
+        return select_dictionary
     else:
-        return random.sample(text_sentences, len(text_sentences))
+        # We shuffle all the word_texts, choose 3 out of them
+        # For each word_text from these 3, shuffle the sentences, choose one sentence for each word_text
+        for word_text in word_text_masked_sentence_dict.keys():
+            random.shuffle(word_text_masked_sentence_dict[word_text])
+            select_dictionary[word_text] = [word_text_masked_sentence_dict[word_text][0]]
+        return select_dictionary
 
 
 async def create_distractors(chosen_node: Dict[str, Any], graph_id: int, session: AsyncSession,
@@ -362,5 +392,66 @@ async def create_distractors(chosen_node: Dict[str, Any], graph_id: int, session
     return distractors[:num_distractors]
 
 
-if __name__ == '__main__':
-    pass
+# Example usage:
+if __name__ == "__main__":
+    lemma_1 = "project"
+    word_text_masked_sentence_list_1 = [
+        [
+            "project",
+            [
+                "masked sentence 1", "masked sentence 2", "masked sentence 3"
+            ]
+        ],
+        [
+            "projecting",
+            [
+                "masked sentence 4", "masked sentence 5"
+            ]
+        ]
+    ]
+
+    lemma_2 = "apple"
+    word_text_masked_sentence_list_2 = [
+        [
+            "apple",
+            [
+                "masked sentence 1", "masked sentence 2", "masked sentence 3"
+            ]
+        ],
+    ]
+
+    lemma_3 = "tree"
+    word_text_masked_sentence_list_3 = [
+        [
+            "trees",
+            [
+                "masked sentence 1", "masked sentence 2"
+            ]
+        ],
+    ]
+
+    lemma_4 = "tree"
+    word_text_masked_sentence_list_4 = [
+        [
+            "tuzi",
+            [
+                "masked sentence 1",
+            ]
+        ],
+    ]
+
+    lemma_5 = "project"
+    word_text_masked_sentence_list_5 = [
+        [
+            "project",
+            [
+                "masked sentence 1", "masked sentence 2",
+            ]
+        ],
+        [
+            "projecting",
+            [
+                "masked sentence 3"
+            ]
+        ]
+    ]
