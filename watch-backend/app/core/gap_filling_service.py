@@ -69,7 +69,7 @@ async def generate_gap_filling_exercises(user_id: int, graph_id: int, session: A
 
     for node_id in chosen_nodes:
         node = top_candidates[node_id]
-        logger.debug(f"-------Chosen node: {top_candidates[node_id]['lemma']}")
+        logger.debug(f"-------Chosen node: {top_candidates[node_id]['lemma']}， node_id: {node_id}")
 
         # todo：it should be the case that for one node, three sentnces, not for each unique word_text, debug for this
         #  issue
@@ -327,6 +327,7 @@ async def create_distractors(chosen_node: Dict[str, Any], graph_id: int, session
     node_map = {}  # Map node IDs to their data
     for node in nodes:
         G.add_node(node.id)
+        # TODO: consider the possibility of maintaining a pos pool for later distractor generation
         node_map[node.id] = {
             "lemma": node.lemma,
             "mastery": node.mastery,

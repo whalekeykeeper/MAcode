@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api import deps
 from app.core.gap_filling_service import generate_gap_filling_exercises
 from app.core.logger import logger
-from app.models import User, Graph, GapFillingTable, GraphNode
+from app.models import User, Graph, GapFillingTable, GraphNode, GraphEdge
 from app.schemas.requests import ExerciseResultUpdateRequest
 from app.schemas.responses import GapFillingResponse, ExerciseResultUpdateResponse
 
@@ -96,20 +96,48 @@ async def exercise_result_update(
     correct_number = 0
     for exercise in exercise_results:
         if exercise.correct_or_not:
-            change_mastery_score = 0.3
+            mastery_score_change_param = 0.3
             correct_or_not = True
             correct_number += 1
         else:
-            change_mastery_score = -0.3
+            mastery_score_change_param = -0.3
             correct_or_not = False
 
         stmt = select(GraphNode).where(GraphNode.id == exercise.node_id)
         node = (await session.execute(stmt)).scalar_one_or_none()
         if not node:
             raise HTTPException(status_code=404, detail="Node not found when updating exercise results")
-        node.mastery += change_mastery_score
+        logger.debug(f"-----\nNode {node.lemma} with id {node.id} \noriginal mastery: {node.mastery}.")
+        # The formula is: new_mastery = old_mastery +- old_mastery * change_mastery_score
+        node.mastery += node.mastery * mastery_score_change_param
+        if node.mastery > 0.99:
+            node.mastery = 0.99
+        logger.debug(f"new mastery: {node.mastery}.")
         session.add(node)
         await session.flush()
+
+        # Spread the activation of mastery score to direct neighboring nodes.
+        stmt = select(GraphEdge).where(GraphEdge.node1_id == node.id)
+        edges = (await session.execute(stmt)).scalars().all()
+        neighbors = {}  # {node_id: weight}
+        for edge in edges:
+            if edge.node2_id == node.id:
+                neighbors[edge.node1_id] = edge.weight
+            else:
+                neighbors[edge.node2_id] = edge.weight
+        for neighbor_id, weight in neighbors.items():
+            stmt = select(GraphNode).where(GraphNode.id == neighbor_id)
+            neighbor = (await session.execute(stmt)).scalar_one_or_none()
+            logger.debug(
+                f"Node {node.lemma} with id {node.id} spread activation to node {neighbor.lemma} with neighbor_id "
+                f"{neighbor_id}, \noriginal mastery: {neighbor.mastery}.")
+            # The formula is: new_mastery = old_mastery +- neighbor.mastery* change_mastery_score * weight
+            neighbor.mastery += neighbor.mastery * mastery_score_change_param * weight
+            if neighbor.mastery > 0.99:
+                neighbor.mastery = 0.99
+            logger.debug(f"new mastery: {neighbor.mastery}.")
+            session.add(neighbor)
+            await session.flush()
 
         stmt = select(GapFillingTable).where(GapFillingTable.id == exercise.exercise_id)
         gap_filling = (await session.execute(stmt)).scalar_one_or_none()
@@ -123,4 +151,6 @@ async def exercise_result_update(
                                             correct_rate=correct_rate)
     logger.info(f"User {user.id} updated {len(exercise_results)} exercises, {correct_number} correct, "
                 f"correct rate: {correct_rate}")
+
+    await session.commit()
     return response
