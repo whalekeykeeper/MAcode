@@ -7,7 +7,7 @@ from app.core.gap_filling_service import generate_gap_filling_exercises
 from app.core.logger import logger
 from app.models import User, Graph, GapFillingTable, GraphNode
 from app.schemas.requests import ExerciseResultUpdateRequest
-from app.schemas.responses import GapFillingResponse
+from app.schemas.responses import GapFillingResponse, ExerciseResultUpdateResponse
 
 router = APIRouter()
 
@@ -95,35 +95,32 @@ async def exercise_result_update(
     # Update the GraphNode table and the GapFilling table
     correct_number = 0
     for exercise in exercise_results:
-        if exercise.is_correct:
+        if exercise.correct_or_not:
             change_mastery_score = 0.3
-            is_correct = True
+            correct_or_not = True
             correct_number += 1
         else:
             change_mastery_score = -0.3
-            is_correct = False
+            correct_or_not = False
 
-        stmt = select(GraphNode).where(GraphNode.node_id == exercise.node_id)
+        stmt = select(GraphNode).where(GraphNode.id == exercise.node_id)
         node = (await session.execute(stmt)).scalar_one_or_none()
         if not node:
             raise HTTPException(status_code=404, detail="Node not found when updating exercise results")
-        node.mastery_score += change_mastery_score
+        node.mastery += change_mastery_score
         session.add(node)
         await session.flush()
 
-        stmt = select(GapFillingTable).where(GapFillingTable.exercise_id == exercise.exercise_id)
+        stmt = select(GapFillingTable).where(GapFillingTable.id == exercise.exercise_id)
         gap_filling = (await session.execute(stmt)).scalar_one_or_none()
         if not gap_filling:
             raise HTTPException(status_code=404, detail="GapFilling table not found when updating exercise results")
-        gap_filling.is_correct = is_correct
+        gap_filling.correct_or_not = correct_or_not
         session.add(gap_filling)
         await session.flush()
     correct_rate = correct_number / len(exercise_results)
-    response = ExerciseResultUpdateResponse({
-        "exercise_amount": len(exercise_results),
-        "correct_amount": correct_number,
-        "correct_rate": correct_rate
-    })
+    response = ExerciseResultUpdateResponse(exercise_amount=len(exercise_results), correct_amount=correct_number,
+                                            correct_rate=correct_rate)
     logger.info(f"User {user.id} updated {len(exercise_results)} exercises, {correct_number} correct, "
                 f"correct rate: {correct_rate}")
     return response
