@@ -180,6 +180,8 @@ async def update_chosen_in_database(user_id: int,
             f"GraphNode not found for user_id when updating the mastery score after chosen a word:"
             f" {user_id}, word id: {word.id}")
     logger.debug(f"GraphNode's mastery before updating for word {word.lemma}: {graph_node.mastery}")
+
+    # TODO: we did not choose to spread activation for this scenario, should discuss if it is necessary.
     graph_node.mastery -= weight_adjustment_for_chosen_word  # 0.15 by default
     # make sure mastery is not less than 0
     if graph_node.mastery < 0:

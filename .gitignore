@@ -9,3 +9,4 @@ watch-backend/app/core/static/
 watch-backend/static/
 /.idea
 watch-backend/.vscode/launch.json
+watch-backend/app/resources/glove.840B.300d.txt

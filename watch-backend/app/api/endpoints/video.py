@@ -1,10 +1,13 @@
 # /app/api/endpoints/video.py
 
+import re
 import time
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import Request
 from fastapi.responses import FileResponse
+from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -111,6 +114,7 @@ async def process_video(
 @router.get("/stream/{video_id}")
 async def stream_video(
         video_id: int,
+        request: Request,
         session: AsyncSession = Depends(deps.get_session),
 ):
     """
@@ -118,6 +122,7 @@ async def stream_video(
     
     Args:
         video_id: Database ID of the video (not YouTube ID)
+        request: HTTP request object
         session: Database session
         
     Returns:
@@ -129,10 +134,29 @@ async def stream_video(
     if not video:
         raise HTTPException(status_code=404, detail="Video not found")
 
-    if not Path(video.video_path).exists():
+    video_path = Path(video.video_path)
+    if not video_path.exists():
         raise HTTPException(status_code=404, detail="Video file not found")
+    file_size = video_path.stat().st_size
+    headers = {}
+    range_header = request.headers.get('range')
+    if range_header:
+        byte1, byte2 = 0, None
+        m = re.search(r'bytes=(\d+)-(\d*)', range_header)
+        if m:
+            byte1 = int(m.group(1))
+            if m.group(2):
+                byte2 = int(m.group(2))
 
-    return FileResponse(video.video_path)
+        length = file_size - byte1 if byte2 is None else byte2 - byte1 + 1
+        with open(video_path, 'rb') as f:
+            f.seek(byte1)
+            data = f.read(length)
+
+        headers['Content-Range'] = f'bytes {byte1}-{byte1 + length - 1}/{file_size}'
+        return StreamingResponse(iter([data]), media_type="video/mp4", status_code=206, headers=headers)
+
+    return FileResponse(video_path, media_type='video/mp4', headers={"Access-Control-Allow-Origin": "*"})
 
 
 @router.get("/vtt/{video_id}")

@@ -71,7 +71,7 @@ async def generate_gap_filling_exercises(user_id: int, graph_id: int, session: A
         node = top_candidates[node_id]
         logger.debug(f"-------Chosen node: {top_candidates[node_id]['lemma']}， node_id: {node_id}")
 
-        # todo：it should be the case that for one node, three sentnces, not for each unique word_text, debug for this
+        # todo：it should be the case that for one node, three sentences, not for each unique word_text, debug for this
         #  issue
         select_list = await create_masked_sentence(node, session)
         distractors = await create_distractors(node, graph_id, session)
@@ -135,9 +135,11 @@ async def find_top_candidates(graph_id: int,
     }
 
     # Filter nodes based on mastery threshold and acquired status
+
     eligible_nodes = [node_id for node_id, centrality in sorted(closeness_centrality.items(), key=lambda x: -x[1])
                       if node_data[node_id]["mastery"] < mastery_threshold and not node_data[node_id]["acquired"]
                       ][:exercise_number]
+
     logger.debug(f"---------\nEligible nodes: {eligible_nodes}")
 
     # Basing on eligible_nodes, return dictionary of node_data
@@ -219,12 +221,12 @@ async def create_masked_sentence(chosen_node: Dict[str, Any], session: AsyncSess
             line_stmt = select(Line).where(Line.id == word.line_id)
             line = (await session.execute(line_stmt)).scalar_one_or_none()
             if line:
-                sentence_stmt = select(Sentence).where(Sentence.id == line.sentence_id)
+                sentence_stmt = select(Sentence).where(Sentence.id == line.sentence_id and Sentence.language == "en")
                 sentence = (await session.execute(sentence_stmt)).scalar_one_or_none()
                 if sentence:
                     sentences.add(sentence.sentence_text)
 
-        # Mask the word_text in each sentence
+        # Mask all the word_text occurrence in each sentence
         # TODO: we put sentence's texts into a list directly, but in the future, we should use sentence_id here to reduce the size of the data.
         masked_sentences = []
         for sentence_text in sentences:

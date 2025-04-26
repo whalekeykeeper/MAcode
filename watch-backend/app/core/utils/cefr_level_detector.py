@@ -303,9 +303,12 @@ if __name__ == "__main__":
     print((set(tag_spacy) - set(sum(mapping.values(), [])) == set()))
     print(set(pos_cefrj) - set(mapping.keys()) == set())
     print()
-    # Choose to use token.pos_ or token.tag_.
-    for l in ("block, book, century, change, create, cause, early, feel, human, idea, imagination, "
-              "include, know, large, mean, place, spread, start, thing, think, time, "
-              "use, work, big").split(", "):
+    # # Choose to use token.pos_ or token.tag_.
+    # for l in ("block, book, century, change, create, cause, early, feel, human, idea, imagination, "
+    #           "include, know, large, mean, place, spread, start, thing, think, time, "
+    #           "use, work, big").split(", "):
+    #     print(l, detect_cefrj_level(l))
+    #     print()
+    for l in "accuse ".split(" "):
         print(l, detect_cefrj_level(l))
         print()

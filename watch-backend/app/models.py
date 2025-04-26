@@ -245,6 +245,7 @@ class GraphNode(Base):
     __tablename__ = "graph_node"
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     graph_id: Mapped[int] = mapped_column(ForeignKey("graph_model.id"), nullable=False)
+    # TODO: connect to the word_model table
     lemma: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
     mastery: Mapped[float] = mapped_column(Float, nullable=False, default=0.5)
     word_ids: Mapped[list] = mapped_column(JSON, nullable=False, default=list)

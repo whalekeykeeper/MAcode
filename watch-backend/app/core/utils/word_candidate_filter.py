@@ -79,13 +79,14 @@ if __name__ == "__main__":
     print(stopword_filter_en("A"))
     print(stopword_filter_zh("的"))
     print(pos_filter("CCONJ"))
-    print(cefr_filter("en", "cause"))
-    print(cefr_filter("en", "use"))
+
     print(filter_pipeline('en', '14th', 'NOUN', '14th'))
     print(filter_pipeline("en", "big", "ADJ", "Big"))
     print(filter_pipeline("de", "the", "DET", "The"))
     print(filter_pipeline('en', 'apple\'', 'NOUN', 'apple\''))
     print(filter_pipeline('en', '张3', 'NOUN', '张3'))
+
+    print(filter_pipeline('en', 'over', 'P', 'but'))
     print()
 
     # Expected output: True
@@ -96,3 +97,16 @@ if __name__ == "__main__":
     print(pos_filter("VERB"))
     print(filter_pipeline("zh", "苹果", "NOUN", "apples"))  # made-up example
     print(filter_pipeline("zh", "苹果", "NOUN", "apples"))  # made-up example
+
+    print("======")
+    nlp = spacy.load("en_core_web_sm")
+    # Process whole documents
+    text = ("keep later laterly")
+    doc = nlp(text)
+    # Analyze syntax
+    for token in doc:
+        print(token.pos_)
+        print(token.lemma_)
+    # Find named entities, phrases and concepts
+    for entity in doc.ents:
+        print(entity.text, entity.label_)

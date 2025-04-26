@@ -24,3 +24,8 @@ class ExerciseResultUpdateRequest(BaseRequest):
     node_id: int
     exercise_id: int
     correct_or_not: bool
+
+
+class CloudRequest(BaseModel):
+    min_mastery: float
+    max_mastery: float

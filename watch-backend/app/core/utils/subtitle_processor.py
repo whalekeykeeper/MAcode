@@ -105,18 +105,43 @@ def analyze_text(
             "sentence_text": sent.text.strip()
         })
 
+    # # If use word embeddings from BERT MULTILINGUAL
+    # model_name = "bert-base-multilingual-cased"
+    # bert_tokenizer = BertTokenizerFast.from_pretrained(model_name)
+    # model = BertModel.from_pretrained(model_name)
+    #
+    # words = [token.text for token in doc]  # Use spaCy tokens
+    # tokens = bert_tokenizer(words, return_tensors="pt", is_split_into_words=True, padding=True, truncation=True)
+    #
+    # # Get BERT embeddings in one forward pass
+    # with torch.no_grad():
+    #     outputs = model(**tokens)
+    # last_hidden_states = outputs.last_hidden_state
+    #
+    # word_ids = tokens.word_ids()
+    # word_embeddings = {}
+
+    for idx, word in enumerate(words):
+        token_indices = [i for i, wid in enumerate(word_ids) if wid == idx]
+        if token_indices:
+            # Average the embeddings for subwords
+            word_embedding = last_hidden_states[0][token_indices].mean(dim=0)
+            word_embeddings[word] = word_embedding.numpy()
+
     # Calculate the CEFR level for the token and collect A1 and A2 words
     cefr_dict = {}
-    a1_a2_lemma_list = []
+    a1_a2_b1_lemma_list = []
 
     for token in doc:
         if language != "en":
             cefr_dict[token.lemma_] = ""
         else:
             cefr = detect_cefrj_level(token.text)
-            if cefr:  # If we detected a CEFR level
-                if cefr in ["A1", "A2", "a1", "a2"]:
-                    a1_a2_lemma_list.append(token.lemma_)
+            if cefr:
+                # We remove A1, A2, B1 words from the dictionary because our experiment participants has at least b1
+                # level
+                if cefr in ["A1", "A2", "a1", "a2", "b1", "B1"]:
+                    a1_a2_b1_lemma_list.append(token.lemma_)
                 else:
                     # Each (token.lemma_, token.pos_) key should only have one CEFR level
                     # TODO: check it in the CEFR_J database.
@@ -124,16 +149,18 @@ def analyze_text(
                     cefr_dict[token.lemma_] = cefr
             else:
                 cefr_dict[token.lemma_] = ""
-    a1_a2_lemma_list = list(set(a1_a2_lemma_list))
+    a1_a2_b1_lemma_list = list(set(a1_a2_b1_lemma_list))
 
-    # Remove A1 and A2 words from cefr_dict since some a1_a2 words entered the dictionary without level and then with
-    # a1/a2 level.
+    # Remove A1, A2, B1 words from cefr_dict since some a1_a2_b1 words entered the dictionary without level and then
+    # with a1/a2/b1 level.
     for k, v in cefr_dict.items():
-        if k in a1_a2_lemma_list:
+        if k in a1_a2_b1_lemma_list:
             cefr_dict[k] = ""
 
     # Process tokens
     for token in doc:
+
+        # For debugging
         if token.lemma in ("block, book, century, change, create, early, feel, human, idea, imagination, "
                            "include, know, large, mean, place, spread, start, thing, think, time, "
                            "use, work, big").split(", "):
@@ -141,7 +168,7 @@ def analyze_text(
 
         start_idx = token.idx
         end_idx = start_idx + len(token.text)
-        if token.lemma_ in a1_a2_lemma_list:
+        if token.lemma_ in a1_a2_b1_lemma_list:
             continue
         cefr = cefr_dict.get((token.lemma_, token.pos_), "")
         # Filter tokens based on linguistic criteria: punctuation, stop words, POS.
@@ -156,6 +183,10 @@ def analyze_text(
                 if line_id is not None:
                     token_line_ids.add(line_id)
 
+        ## TODO: get word embedding from BERT for token
+        if embedding is not None:
+            print("\n\n------:", embedding.tolist())
+
         for line_id in token_line_ids:
             token_collection.append({
                 "line_id": line_id,
@@ -164,8 +195,13 @@ def analyze_text(
                 "pos": token.pos_,
                 "cefr": cefr,
                 "vector": token.vector.tolist() if token.has_vector else None
+                # # If use word embeddings from BERT MULTILINGUAL
+                # "vector": embedding[token.text] if embedding is not None else None
             })
-    return sentence_collection, token_collection, a1_a2_lemma_list
+    return sentence_collection, token_collection, a1_a2_b1_lemma_list
+
+
+# def extract_word_embedding_from_bert(word: str) -> Optional[List[float]]:
 
 
 class SubtitleProcessor:

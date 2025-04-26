@@ -23,7 +23,7 @@ app.include_router(api_router, prefix="/api")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
+    allow_credentials=False,  # must be set to True if want to allow cookies in the future
     allow_methods=["*"],
     allow_headers=["*"],
 )

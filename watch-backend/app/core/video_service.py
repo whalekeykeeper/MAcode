@@ -231,16 +231,25 @@ async def initiate_or_update_vocabulary(session: AsyncSession, user: User, video
                 if key not in new_words:
                     new_words[key] = []
                 vocabulary_dict[key].append([word.id, word.lemma])
+
+                # Thos new_words is a dictionary with lemma+pos as key, a list of (id, lemma) as value,
+                # and it conveys all the new words in the new video, no matter if this word has already been in the
+                # vocabulary. By doing so, we make sure that we collect all the different contexts of the same word.
                 new_words[key].append([word.id, word.lemma])
 
+        # The following detection is just for a general statistics reason
         await detect_lemma_pos_pair_with_multiple_occurrences(vocabulary_dict)
+
         session.add(vocabulary)
         await session.flush()
         logger.info(f"Vocabulary for user {user.id} updated with new words.")
 
     else:
         vocabulary_dict = await initiate_vocabulary(user.id, session)
+
+        # The following detection is just for a general statistics reason
         await detect_lemma_pos_pair_with_multiple_occurrences(vocabulary_dict)
+
         new_words = vocabulary_dict
         logger.info(f"Vocabulary for user {user.id} initiated.")
 
@@ -306,6 +315,11 @@ async def initiate_families(user_id: int, session: AsyncSession) -> None:
         for id_lemma_list in ele:  # id_lemma_list = [word_id, word_lemma]
             word_id = id_lemma_list[0]
             word_lemma = id_lemma_list[1]
+
+            # ToDo: test the following two-line code
+            if len(word_lemma) <= 2:
+                continue
+
             if word_lemma not in families:
                 families[word_lemma] = []
             families[word_lemma].append(word_id)
@@ -627,7 +641,8 @@ async def update_graph(
         logger.error("No valid vectors found for any family. Please check.")
         return
 
-    # Remove all existing edges for this graph
+    # Remove all existing edges for this graph and recompute. So that we captured all the potential new contexts for
+    # existing <root word, POS> pairs.
     stmt = delete(GraphEdge).where(GraphEdge.graph_id == graph_entry.id)
     await session.execute(stmt)
     logger.debug(f"Existing edges removed from the graph.")

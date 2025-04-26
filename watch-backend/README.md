@@ -30,7 +30,7 @@ poetry shell
 1. Run docker compose to start the database:
 
 ```bash
-docker-compose up -d
+docker compose up -d
 ```
 
 2. Run the app:
