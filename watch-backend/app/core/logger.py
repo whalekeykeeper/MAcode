@@ -1,10 +1,12 @@
 # app/core/logger.py
 
 import logging
+
 from colorama import Fore, Style, init
 
 # Initialize colorama
 init(autoreset=True)
+
 
 class ColoredFormatter(logging.Formatter):
     # Define color codes for different log levels
@@ -22,6 +24,7 @@ class ColoredFormatter(logging.Formatter):
         record.levelname = f"{log_color}{record.levelname}{Style.RESET_ALL}"
         return super().format(record)
 
+
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
@@ -33,6 +36,8 @@ console_handler = logging.StreamHandler()
 console_handler.setLevel(logging.DEBUG)
 console_handler.setFormatter(formatter)
 logger.addHandler(console_handler)
+
+logger.propagate = False
 
 # File handler without colored output
 file_handler = logging.FileHandler("app.log", mode="a", encoding="utf-8")

@@ -105,7 +105,8 @@ def analyze_text(
     for token in doc:
         if language == "zh":
             continue
-        cefr_level = detect_cefr_level(token.lemma_, token.pos_, cefr_lookup)
+
+        cefr_level = detect_cefr_level(token.lemma_.lower(), token.pos_, cefr_lookup)
         if cefr_level in ["A1", "A2", "B1"]:
             a1_a2_b1_lemma_pos_list.append((token.lemma_.lower(), map_spacy_pos_to_cefrj(token.pos_), cefr_level))
             logger.info(
@@ -160,9 +161,9 @@ def analyze_text(
             token_collection.append({
                 "line_id": line_id,
                 "text": token.text,
-                "lemma": token.lemma_,
+                "lemma": token.lemma_.lower(),
                 "pos": token.pos_,
-                "cefr": detect_cefr_level(token.lemma_, token.pos_, cefr_lookup),
+                "cefr": detect_cefr_level(token.lemma_.lower(), token.pos_, cefr_lookup),
                 "vector": token.vector.tolist() if token.has_vector else None
                 # # If use word embeddings from BERT MULTILINGUAL
                 # "vector": embedding[token.text] if embedding is not None else None
@@ -191,7 +192,7 @@ if __name__ == "__main__":
         print(f"- {sent['sentence_text']} (lines: {sent['line_ids']})")
 
     # Print tokens kept
-    print("\n===Tokens kept ===")
+    print("\n=== Tokens kept ===")
     for token in tokens:
         cefr_level_display = token['cefr'] if token['cefr'] else "Unknown"
         print(

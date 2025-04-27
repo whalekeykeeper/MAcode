@@ -10,3 +10,6 @@ watch-backend/static/
 /.idea
 watch-backend/.vscode/launch.json
 watch-backend/app/resources/glove.840B.300d.txt
+/watch-backend/tools
+/watch-backend/tools
+watch-backend/tools/families_exporter.py

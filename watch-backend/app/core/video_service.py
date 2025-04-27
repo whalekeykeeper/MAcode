@@ -14,7 +14,6 @@ from app.core.logger import logger
 from app.core.utils.bilingual_subtitle_creator import create_bilingual_vtt
 from app.core.utils.subtitle_processor import SubtitleProcessor
 from app.core.utils.video_subtitles_downloader import download_video_and_subtitles
-from app.core.utils.word_candidate_filter import filter_pipeline
 from app.models import Video, User, Families, Graph, Vocabulary, Word, GraphNode, GraphEdge
 
 # Load language models
@@ -182,8 +181,10 @@ async def process_user_specific_data(
     session.add(user)
     await session.flush()
 
-    new_words = await initiate_or_update_vocabulary(session, user, video_word_ids)
     logger.info(f"Vocabulary initiated or updated for user {user.id}.")
+
+    new_words = await initiate_or_update_vocabulary(session, user, video_word_ids)
+    new_word_count = sum(len(word_list) for word_list in new_words.values())
 
     stmt = select(Families).where(Families.user_id == user.id)
     families = (await session.execute(stmt)).scalars().all()
@@ -193,6 +194,10 @@ async def process_user_specific_data(
         await initiate_families(user.id, session)
     logger.info(f"Families initiated or updated for user {user.id}.")
 
+    stmt = select(Families).where(Families.user_id == user.id)
+    updated_families = (await session.execute(stmt)).scalars().all()
+    family_count = len(updated_families)
+
     stmt = select(Graph).where(Graph.user_id == user.id)
     graph = (await session.execute(stmt)).scalar_one_or_none()
     if graph:
@@ -200,7 +205,20 @@ async def process_user_specific_data(
     else:
         await initiate_graph(user.id, session)
 
-    logger.info(f"Processed vocabulary, family, graph for user {user.id}.")
+    graph_nodes = []
+    if graph:
+        stmt = select(GraphNode).where(GraphNode.graph_id == graph.id)
+        graph_nodes = (await session.execute(stmt)).scalars().all()
+        node_count = len(graph_nodes)
+
+        # stmt = select(GraphNode).where(GraphNode.graph_id == graph.id if graph else 0)
+        # graph_nodes = (await session.execute(stmt)).scalars().all()
+
+        logger.info(f"   [SUMMARY] Processed video {video_id} for user {user.id}:")
+        logger.info(f"   ➔ New words added: {new_word_count}")
+        logger.info(f"   ➔ Total families: {family_count}")
+        logger.info(f"   ➔ Total graph nodes: {node_count}")
+        logger.info(f"   ➔ Total videos processed so far: {len(user.video_ids)}")
 
 
 async def initiate_or_update_vocabulary(session: AsyncSession, user: User, video_word_ids: List[int]) \
@@ -217,37 +235,34 @@ async def initiate_or_update_vocabulary(session: AsyncSession, user: User, video
             word = (await session.execute(stmt)).scalar_one_or_none()
 
             # Only add English words to the vocabulary for now
-            if (word and str(word.language) == "en"
-                    and filter_pipeline(str(word.language), word.lemma, word.pos, word.word)):
+            if word and str(word.language) == "en":
+                # For safety
+                assert (word.cefr not in ["A1", "A2",
+                                          "B1"]), f"[CEFR Error] Word {word.lemma} ({word.pos}) with CEFR {word.cefr} should not exist."
 
-                if word.lemma in ("block, book, century, change, create, early, feel, human, idea, imagination, "
-                                  "include, know, large, mean, place, spread, start, thing, think, time, "
-                                  "use, work, big").split(", "):
-                    logger.debug(f"=========!!!!!!@@@@@Word: {word.lemma}, {word.pos}, {word.word}, {str(word.cefr)}")
                 key = f"{word.lemma};{word.pos}"
                 if key not in vocabulary_dict:
                     vocabulary_dict[key] = []
                 if key not in new_words:
                     new_words[key] = []
-                vocabulary_dict[key].append([word.id, word.lemma])
 
+                vocabulary_dict[key].append([word.id, word.lemma])
                 # Thos new_words is a dictionary with lemma+pos as key, a list of (id, lemma) as value,
                 # and it conveys all the new words in the new video, no matter if this word has already been in the
                 # vocabulary. By doing so, we make sure that we collect all the different contexts of the same word.
                 new_words[key].append([word.id, word.lemma])
 
-        # The following detection is just for a general statistics reason
-        await detect_lemma_pos_pair_with_multiple_occurrences(vocabulary_dict)
+        # # The following detection is just for a general statistics reason
+        # await detect_lemma_pos_pair_with_multiple_occurrences(vocabulary_dict)
 
-        session.add(vocabulary)
         await session.flush()
         logger.info(f"Vocabulary for user {user.id} updated with new words.")
 
     else:
         vocabulary_dict = await initiate_vocabulary(user.id, session)
 
-        # The following detection is just for a general statistics reason
-        await detect_lemma_pos_pair_with_multiple_occurrences(vocabulary_dict)
+        # # The following detection is just for a general statistics reason
+        # await detect_lemma_pos_pair_with_multiple_occurrences(vocabulary_dict)
 
         new_words = vocabulary_dict
         logger.info(f"Vocabulary for user {user.id} initiated.")
@@ -282,7 +297,10 @@ async def initiate_vocabulary(user_id: int, session: AsyncSession) -> Dict[str, 
     vocabulary_dict: Dict[str, List[List[Union[int, str]]]] = {}
     for word in words:
         # Only add English words to the vocabulary for now
-        if word and word.language == "en" and filter_pipeline(word.language, word.lemma, word.pos, word.word):
+        if word and word.language == "en":
+            # for safety
+            assert (word.cefr not in ["A1", "A2",
+                                      "B1"]), f"[CEFR Error] Word {word.lemma} ({word.pos}) with CEFR {word.cefr} should not exist."
 
             key = f"{word.lemma};{word.pos}"
             if key not in vocabulary_dict:
@@ -306,34 +324,27 @@ async def initiate_vocabulary(user_id: int, session: AsyncSession) -> Dict[str, 
 
 async def initiate_families(user_id: int, session: AsyncSession) -> None:
     logger.info(f"Initiating families for user {user_id}...")
-    vocabulary_dict = (
-        await session.execute(select(Vocabulary).where(Vocabulary.user_id == user_id))).scalar_one().vocabulary
+    stmt = select(Vocabulary).where(Vocabulary.user_id == user_id)
+    vocabulary_dict = (await session.execute(stmt)).scalar_one().vocabulary
 
-    families = {}
-    for ele in vocabulary_dict.values():
-        for id_lemma_list in ele:  # id_lemma_list = [word_id, word_lemma]
-            word_id = id_lemma_list[0]
-            word_lemma = id_lemma_list[1]
+    families = defaultdict(list)
+    for key, id_lemma_lists in vocabulary_dict.items():
+        lemma, _ = key.split(";")
+        for word_id, _ in id_lemma_lists:
+            families[lemma].append(word_id)
 
-            # ToDo: test the following two-line code
-            if len(word_lemma) <= 2:
-                continue
-
-            if word_lemma not in families:
-                families[word_lemma] = []
-            families[word_lemma].append(word_id)
-
-    for key, value in families.items():
+    for lemma, word_ids in families.items():
         family_entry = Families(
             user_id=user_id,
-            lemma=key,
-            word_ids=value,
+            lemma=lemma,
+            word_ids=word_ids,
         )
         session.add(family_entry)
 
     await session.flush()
     await session.commit()
     logger.info(f"Families for user {user_id} initiated.")
+    logger.info(f"Total families created: {len(families)}")
 
 
 async def update_family_with_new_words(
@@ -347,20 +358,22 @@ async def update_family_with_new_words(
         family.lemma: family for family in (await session.execute(stmt)).scalars().all()
     }
 
-    for lemma_pos_pair, words in new_words.items():
-        lemma = lemma_pos_pair.split(";")[0]
+    for lemma_pos, id_lemma_lists in new_words.items():
+        lemma, _ = lemma_pos.split(";")
+        word_ids = [word_id for word_id, _ in id_lemma_lists]
+
         if lemma in existing_families:
             family = existing_families[lemma]
             existing_word_ids = set(family.word_ids)
-            for word in words:
-                if word[0] not in existing_word_ids:  # word[0] is the word_id
-                    family.word_ids.append(word[0])
-            session.add(family)
+            new_word_ids = [wid for wid in word_ids if wid not in existing_word_ids]
+            if new_word_ids:
+                family.word_ids.extend(new_word_ids)
+                session.add(family)
         else:
             new_family = Families(
                 user_id=user_id,
                 lemma=lemma,
-                word_ids=[word[0] for word in words],
+                word_ids=word_ids,
             )
             session.add(new_family)
 

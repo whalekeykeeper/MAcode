@@ -71,6 +71,12 @@ Whenever changed the data model, run a shell script to generate a new migration:
 pytest
 ```
 
+## Get videos in a batch for experiment from the root directory
+
+```
+poetry run python -m tools.batch_inject_videos
+```
+
 ## Project Structure
 
 

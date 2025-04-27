@@ -12,15 +12,17 @@ import webvtt
 from dotenv import load_dotenv
 from spacy.tokens import Token
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.orm import sessionmaker
 
+from app.core.config import STATIC_DIR
 from app.core.logger import logger
 from app.core.utils.analyze_text import analyze_text
 from app.core.utils.cefr_level_detector import load_cefr_lookup
-from app.core.utils.cefr_level_detector import map_spacy_pos_to_cefrj
 from app.core.utils.word_candidate_filter import filter_pipeline
-from app.models import Line, Sentence, User, Video, Word
+from app.models import Line, Sentence, Word
+from app.models import User, Video
 
 NLP_EN = spacy.load("en_core_web_lg")
 NLP_ZH = spacy.load("zh_core_web_lg")
@@ -60,6 +62,7 @@ class SubtitleProcessor:
             session: AsyncSession,
             similarity_threshold: float = 0.3,
     ) -> str:
+        static_folder = STATIC_DIR
         """Parsing bilingual subtitle for a new video and update database."""
         # Get video and user
         stmt = select(Video).where(Video.ytb_id == ytb_id)
@@ -69,6 +72,20 @@ class SubtitleProcessor:
         stmt = select(User).where(User.uuid == user_uuid)
         user = (await session.execute(stmt)).scalar_one()
         logger.info(f"Found user: {user.id}")
+
+        # first, check if the video and the bilingual subtitle already exist in local static folder
+        folder_path = static_folder / ytb_id
+        bilingual_vtt_path = folder_path / f"{ytb_id}_bilingual.vtt"
+
+        if bilingual_vtt_path.exists():
+            logger.info(f"Found existing bilingual subtitle at {bilingual_vtt_path}, skipping download.")
+            video.vtt_path = str(bilingual_vtt_path)
+        else:
+            # If the video and bilingual subtitle are not in the static folder, download it and create a bilingual
+            # subtitle
+            logger.warning(f"No local bilingual subtitle found. Downloading subtitles for {ytb_id}...")
+            download_video_and_subtitles(ytb_id, video.url, static_folder)
+            video.vtt_path = create_bilingual_vtt(ytb_id, static_folder)
 
         # Full processing for a new video
         logger.info(f"\nProcessing new video {ytb_id}...")
@@ -292,11 +309,12 @@ class SubtitleProcessor:
                                             a1_a2_b1_lemma_pos_list: List[Tuple[str, str, str]],
                                             session: AsyncSession,
                                             ) -> None:
+        """Create Sentence and Word entries, while filtering out low-CEFR level tokens immediately."""
         logger.info(f"Creating {len(sentence_collection)} sentences for language={language}...")
-        sentence_objs = []
 
-        """Create Sentence and Word entries for each sentence and token."""
+        # Step 1: Create sentences
         # Create all Sentence objects
+        sentence_objs = []
         for sent in sentence_collection:
             sentence_entry = Sentence(
                 video_id=video_id,
@@ -305,16 +323,17 @@ class SubtitleProcessor:
                 sentence_text=sent["sentence_text"],  # ignore the Pycharm warning
             )
             session.add(sentence_entry)
-            await session.flush()
+            sentence_objs.append(sentence_entry)
+        await session.flush()
 
+        # Update sentence_id for Lines
+        for sent_obj, sent in zip(sentence_objs, sentence_collection):
             for line_id in sent["line_ids"]:
                 stmt = select(Line).where(Line.id == line_id)
                 line = (await session.execute(stmt)).scalar_one()
-                line.sentence_id = sentence_entry.id
+                line.sentence_id = sent_obj.id
                 session.add(line)
-                
         await session.flush()
-        sentence_objs.append(sentence_entry)
         logger.info(f"Created {len(sentence_objs)} Sentence entries for {language}.")
 
         # if language == "zh":
@@ -323,19 +342,23 @@ class SubtitleProcessor:
         #     self.new_video_stats["en"]["new_sentences"] = len(sentence_collection)
         # logger.info(f"Created {len(sentence_collection)} sentences for {language}.")
 
+        # Step 2: Create words, filter early
         logger.info(f"Starting to create Word entries for {language}...")
         word_objs = []
+        dropped_by_cefr = 0
+        dropped_by_filter = 0
+
         # Create all Word objects
         for token_data in token_collection:
-            mapped_pos = map_spacy_pos_to_cefrj(token_data["pos"])
-            token_key = (token_data["lemma"], mapped_pos)
-            if token_key in a1_a2_b1_lemma_pos_list:
-                logger.debug(
-                    f"[FILTERED OUT] Word skipped due to A1/A2/B1 filter: {token_data['lemma']} ({mapped_pos})")
+            cefr_level = token_data.get("cefr", "")
+            if cefr_level in ["A1", "A2", "B1"]:
+                # logger.debug(f"[SKIP-CEFR] Skipped {token_data['lemma']} ({token_data['pos']}) at CEFR {cefr_level}")
+                dropped_by_cefr += 1
                 continue
-            # Skip tokens that fail linguistic filter
+
             if not filter_pipeline(language, token_data["lemma"], token_data["pos"], token_data["text"]):
-                logger.debug(f"[FILTER FAILED] Skipping token '{token_data['text']}' ({token_data['pos']})")
+                # logger.debug(f"[SKIP-FILTER] Skipped {token_data['lemma']} ({token_data['pos']}) by filter pipeline.")
+                dropped_by_filter += 1
                 continue
 
             word_vector = token_data.get("vector", None)
@@ -356,7 +379,9 @@ class SubtitleProcessor:
         await session.flush()
         await session.commit()
 
-        logger.info(f"Created {len(word_objs)} Word entries for {language}.")
+        logger.info(f"=====Created {len(word_objs)} Word entries for {language}.")
+        logger.info(f"=====Dropped {dropped_by_cefr} tokens by CEFR level (A1/A2/B1).")
+        logger.info(f"=====Dropped {dropped_by_filter} tokens by linguistic filter.")
 
         # Update internal stats
         self.new_video_stats[language]["new_sentences"] = len(sentence_objs)
@@ -401,24 +426,24 @@ class SubtitleProcessor:
         stats["sentence_count_en"] = sentence_count_en
         stats["sentence_count_zh"] = sentence_count_zh
 
-        # Count words (for both languages)
-        stmt = select(Word).where(Word.video_id.in_(user.video_ids))
-        words = (await session.execute(stmt)).scalars().all()
-        words_en = [word for word in words if word.language == "en"]
-        words_zh = [word for word in words if word.language == "zh"]
-        stats["word_count_en"] = len(words_en)
-        stats["word_count_zh"] = len(words_zh)
-
-        # Most frequent words (for English only)
-        word_freq_en = {}
-        for word in words_en:
-            key = (word.lemma, word.pos)
-            if (not NLP_EN.vocab[word.lemma].is_stop) and word.pos in ["NOUN", "VERB", "ADJ", "ADV",
-                                                                       "PROPN", "INTJ"]:
-                word_freq_en[key] = word_freq_en.get(key, 0) + 1
-
-        sorted_word_freq_en = sorted(word_freq_en.items(), key=lambda x: -x[1])
-        stats["most_frequent_words_en"] = sorted_word_freq_en[:10]
+        # # Count words (for both languages)
+        # stmt = select(Word).where(Word.video_id.in_(user.video_ids))
+        # words = (await session.execute(stmt)).scalars().all()
+        # words_en = [word for word in words if word.language == "en"]
+        # words_zh = [word for word in words if word.language == "zh"]
+        # stats["word_count_en"] = len(words_en)
+        # stats["word_count_zh"] = len(words_zh)
+        #
+        # # Most frequent words (for English only)
+        # word_freq_en = {}
+        # for word in words_en:
+        #     key = (word.lemma, word.pos)
+        #     if (not NLP_EN.vocab[word.lemma].is_stop) and word.pos in ["NOUN", "VERB", "ADJ", "ADV",
+        #                                                                "PROPN", "INTJ"]:
+        #         word_freq_en[key] = word_freq_en.get(key, 0) + 1
+        #
+        # sorted_word_freq_en = sorted(word_freq_en.items(), key=lambda x: -x[1])
+        # stats["most_frequent_words_en"] = sorted_word_freq_en[:10]
 
         return stats
 
@@ -448,6 +473,7 @@ if __name__ == "__main__":
         async_session = sessionmaker(
             engine, expire_on_commit=False, class_=AsyncSession
         )
+        static_folder = STATIC_DIR
 
         async with async_session() as session:
             try:
@@ -457,7 +483,6 @@ if __name__ == "__main__":
 
                 # Get absolute paths
                 project_root = Path(__file__).parent.parent.parent
-                static_folder = project_root / "static"
                 video_folder = static_folder / ytb_id
                 vtt_path = video_folder / f"{ytb_id}_bilingual.vtt"
 
