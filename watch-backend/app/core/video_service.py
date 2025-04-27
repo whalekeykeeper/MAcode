@@ -224,7 +224,6 @@ async def initiate_or_update_vocabulary(session: AsyncSession, user: User, video
                                   "include, know, large, mean, place, spread, start, thing, think, time, "
                                   "use, work, big").split(", "):
                     logger.debug(f"=========!!!!!!@@@@@Word: {word.lemma}, {word.pos}, {word.word}, {str(word.cefr)}")
-                    logger.debug(f"=========!!!!!!@@@@@Word: {word.lemma}, {word.pos}, {word.word}, {word.cefr}")
                 key = f"{word.lemma};{word.pos}"
                 if key not in vocabulary_dict:
                     vocabulary_dict[key] = []

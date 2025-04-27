@@ -16,7 +16,9 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 
 from app.core.logger import logger
-from app.core.utils.cefr_level_detector import detect_cefrj_level
+from app.core.utils.analyze_text import analyze_text
+from app.core.utils.cefr_level_detector import load_cefr_lookup
+from app.core.utils.cefr_level_detector import map_spacy_pos_to_cefrj
 from app.core.utils.word_candidate_filter import filter_pipeline
 from app.models import Line, Sentence, User, Video, Word
 
@@ -42,163 +44,6 @@ class SentenceData:
     sent: spacy.tokens.Span
     sentence_id: int
     line_numbers: List[int]
-
-
-def analyze_text(
-        lines_dict: dict[int, str], language: str
-) -> Tuple[List[Dict[str, List[int]]], List[Dict[str, str]], List[str]]:
-    """
-    Analyzes the text to map sentences and tokens to lines.
-
-    Args:
-        lines_dict: Dictionary where keys are unique line IDs and values are the text lines
-        language: The language of the text (either "zh" or "en")
-
-    Returns:
-        - A collection of sentences where each sentence has:
-          line_ids and sentence_text.
-        - A collection of tokens where each token has:
-          line_id, text, lemma, and pos.
-        - A list of A1 and A2 lemmas.
-    """
-    nlp = NLP_ZH if language == "zh" else NLP_EN
-
-    # Different joining strategy for Chinese and English
-    joined_text = "".join(lines_dict.values()) if language == "zh" else " ".join(lines_dict.values())
-    doc = nlp(joined_text)
-
-    sentence_collection = []
-    token_collection = []
-
-    # Convert dictionary values to list while keeping track of IDs
-    line_ids = list(lines_dict.keys())
-    lines = list(lines_dict.values())
-
-    # Create a mapping of positions to line IDs
-    position_to_line = {}
-    current_pos = 0
-
-    for i, line in enumerate(lines):
-        line_length = len(line)
-        for pos in range(current_pos, current_pos + line_length):
-            position_to_line[pos] = line_ids[i]
-        current_pos += line_length
-        if language == "en" and i < len(lines) - 1:
-            # Account for the space we added between lines
-            current_pos += 1
-
-    # Process sentences
-    for sent in doc.sents:
-        start_idx = sent.start_char
-        end_idx = sent.end_char
-
-        # Find all unique line IDs that this sentence spans
-        sentence_line_ids = set()
-        for pos in range(start_idx, end_idx):
-            if pos < len(joined_text):  # Ensure we don't go past the end of text
-                line_id = position_to_line.get(pos)
-                if line_id is not None:
-                    sentence_line_ids.add(line_id)
-
-        sentence_collection.append({
-            "line_ids": sorted(list(sentence_line_ids)),
-            "sentence_text": sent.text.strip()
-        })
-
-    # # If use word embeddings from BERT MULTILINGUAL
-    # model_name = "bert-base-multilingual-cased"
-    # bert_tokenizer = BertTokenizerFast.from_pretrained(model_name)
-    # model = BertModel.from_pretrained(model_name)
-    #
-    # words = [token.text for token in doc]  # Use spaCy tokens
-    # tokens = bert_tokenizer(words, return_tensors="pt", is_split_into_words=True, padding=True, truncation=True)
-    #
-    # # Get BERT embeddings in one forward pass
-    # with torch.no_grad():
-    #     outputs = model(**tokens)
-    # last_hidden_states = outputs.last_hidden_state
-    #
-    # word_ids = tokens.word_ids()
-    # word_embeddings = {}
-
-    for idx, word in enumerate(words):
-        token_indices = [i for i, wid in enumerate(word_ids) if wid == idx]
-        if token_indices:
-            # Average the embeddings for subwords
-            word_embedding = last_hidden_states[0][token_indices].mean(dim=0)
-            word_embeddings[word] = word_embedding.numpy()
-
-    # Calculate the CEFR level for the token and collect A1 and A2 words
-    cefr_dict = {}
-    a1_a2_b1_lemma_list = []
-
-    for token in doc:
-        if language != "en":
-            cefr_dict[token.lemma_] = ""
-        else:
-            cefr = detect_cefrj_level(token.text)
-            if cefr:
-                # We remove A1, A2, B1 words from the dictionary because our experiment participants has at least b1
-                # level
-                if cefr in ["A1", "A2", "a1", "a2", "b1", "B1"]:
-                    a1_a2_b1_lemma_list.append(token.lemma_)
-                else:
-                    # Each (token.lemma_, token.pos_) key should only have one CEFR level
-                    # TODO: check it in the CEFR_J database.
-                    #  Though even if it has multiple CEFR levels, it doesn not matter now.
-                    cefr_dict[token.lemma_] = cefr
-            else:
-                cefr_dict[token.lemma_] = ""
-    a1_a2_b1_lemma_list = list(set(a1_a2_b1_lemma_list))
-
-    # Remove A1, A2, B1 words from cefr_dict since some a1_a2_b1 words entered the dictionary without level and then
-    # with a1/a2/b1 level.
-    for k, v in cefr_dict.items():
-        if k in a1_a2_b1_lemma_list:
-            cefr_dict[k] = ""
-
-    # Process tokens
-    for token in doc:
-
-        # For debugging
-        if token.lemma in ("block, book, century, change, create, early, feel, human, idea, imagination, "
-                           "include, know, large, mean, place, spread, start, thing, think, time, "
-                           "use, work, big").split(", "):
-            logger.info(f"!!!!!_____!!!!!!should be either a1 or a2: {cefr_dict[token.lemma]}")
-
-        start_idx = token.idx
-        end_idx = start_idx + len(token.text)
-        if token.lemma_ in a1_a2_b1_lemma_list:
-            continue
-        cefr = cefr_dict.get((token.lemma_, token.pos_), "")
-        # Filter tokens based on linguistic criteria: punctuation, stop words, POS.
-        if not filter_pipeline(language, token.lemma_, token.pos_, token.text):
-            continue
-
-        # Find the line ID for this token
-        token_line_ids = set()
-        for pos in range(start_idx, end_idx):
-            if pos < len(joined_text):  # Ensure we don't go past the end of text
-                line_id = position_to_line.get(pos)
-                if line_id is not None:
-                    token_line_ids.add(line_id)
-
-        ## TODO: get word embedding from BERT for token
-        if embedding is not None:
-            print("\n\n------:", embedding.tolist())
-
-        for line_id in token_line_ids:
-            token_collection.append({
-                "line_id": line_id,
-                "text": token.text,
-                "lemma": token.lemma_,
-                "pos": token.pos_,
-                "cefr": cefr,
-                "vector": token.vector.tolist() if token.has_vector else None
-                # # If use word embeddings from BERT MULTILINGUAL
-                # "vector": embedding[token.text] if embedding is not None else None
-            })
-    return sentence_collection, token_collection, a1_a2_b1_lemma_list
 
 
 # def extract_word_embedding_from_bert(word: str) -> Optional[List[float]]:
@@ -238,12 +83,13 @@ class SubtitleProcessor:
 
         # Parse lines_dict to get sentences and tokens
         for language in ["zh", "en"]:
-            sentence_collection, token_collection, a1_a2_lemma_list = analyze_text(
-                lines_dict_bi[language], language
+            cefr_lookup = load_cefr_lookup()
+            sentence_collection, token_collection, a1_a2_b1_lemma_pos_list = analyze_text(
+                lines_dict_bi[language], language, cefr_lookup
             )
             # Create sentence entries and word entries basing on sentence_data_list and token_data_list
             await self._create_sentence_word_entries(sentence_collection, token_collection, language, video.id,
-                                                     a1_a2_lemma_list, session)
+                                                     a1_a2_b1_lemma_pos_list, session)
 
         await self._update_word_ids_and_texts(
             video, user, full_zh_text, full_en_text, session
@@ -443,9 +289,12 @@ class SubtitleProcessor:
                                             token_collection: List[Dict[str, str]],
                                             language: str,
                                             video_id: int,
-                                            a1_a2_lemma_list: List[str],
+                                            a1_a2_b1_lemma_pos_list: List[Tuple[str, str, str]],
                                             session: AsyncSession,
                                             ) -> None:
+        logger.info(f"Creating {len(sentence_collection)} sentences for language={language}...")
+        sentence_objs = []
+
         """Create Sentence and Word entries for each sentence and token."""
         # Create all Sentence objects
         for sent in sentence_collection:
@@ -463,24 +312,36 @@ class SubtitleProcessor:
                 line = (await session.execute(stmt)).scalar_one()
                 line.sentence_id = sentence_entry.id
                 session.add(line)
-            await session.flush()
+                
+        await session.flush()
+        sentence_objs.append(sentence_entry)
+        logger.info(f"Created {len(sentence_objs)} Sentence entries for {language}.")
 
-        if language == "zh":
-            self.new_video_stats["zh"]["new_sentences"] = len(sentence_collection)
-        if language == "en":
-            self.new_video_stats["en"]["new_sentences"] = len(sentence_collection)
-        logger.info(f"Created {len(sentence_collection)} sentences for {language}.")
+        # if language == "zh":
+        #     self.new_video_stats["zh"]["new_sentences"] = len(sentence_collection)
+        # if language == "en":
+        #     self.new_video_stats["en"]["new_sentences"] = len(sentence_collection)
+        # logger.info(f"Created {len(sentence_collection)} sentences for {language}.")
 
-        logger.info(f"Starting to create words for {language}...")
+        logger.info(f"Starting to create Word entries for {language}...")
+        word_objs = []
         # Create all Word objects
         for token_data in token_collection:
-            if token_data["lemma"] in a1_a2_lemma_list:
-                logger.warning(f"!!!This lemma should not occur here, check.")
+            mapped_pos = map_spacy_pos_to_cefrj(token_data["pos"])
+            token_key = (token_data["lemma"], mapped_pos)
+            if token_key in a1_a2_b1_lemma_pos_list:
+                logger.debug(
+                    f"[FILTERED OUT] Word skipped due to A1/A2/B1 filter: {token_data['lemma']} ({mapped_pos})")
                 continue
+            # Skip tokens that fail linguistic filter
+            if not filter_pipeline(language, token_data["lemma"], token_data["pos"], token_data["text"]):
+                logger.debug(f"[FILTER FAILED] Skipping token '{token_data['text']}' ({token_data['pos']})")
+                continue
+
             word_vector = token_data.get("vector", None)
             if word_vector is not None:
                 # Create word object
-                word = Word(
+                word_obj = Word(
                     language=language,
                     word=token_data["text"],
                     lemma=token_data["lemma"],
@@ -490,15 +351,16 @@ class SubtitleProcessor:
                     cefr=token_data.get("cefr", ""),
                     vector=word_vector,
                 )
-            session.add(word)
-        if language == "zh":
-            self.new_video_stats["zh"]["new_words"] = len(token_collection)
-        if language == "en":
-            self.new_video_stats["en"]["new_words"] = len(token_collection)
-        logger.info(f"Created {len(token_collection)} words for {language}.")
-        # Final flush to save all Word and WordContext entries
+                word_objs.append(word_obj)
+        session.add_all(word_objs)
         await session.flush()
         await session.commit()
+
+        logger.info(f"Created {len(word_objs)} Word entries for {language}.")
+
+        # Update internal stats
+        self.new_video_stats[language]["new_sentences"] = len(sentence_objs)
+        self.new_video_stats[language]["new_words"] = len(word_objs)
 
     @staticmethod
     async def stats_for_subtitles(session: AsyncSession, user_id: int) -> dict:

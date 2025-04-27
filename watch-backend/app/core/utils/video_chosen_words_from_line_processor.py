@@ -49,6 +49,8 @@ async def address_words_in_line(start_time: str, end_time: str, video_id: int, u
     if not line:
         logger.warning(f"Line not found for start_time: {start_time}, end_time: {end_time}, video_id: {video_id}")
         return []
+    else:
+        logger.debug(f"[Chosen Line Text] Start: {start_time}, End: {end_time}, Text: \"{line.line_text}\"")
 
     # Extract all the word_ids from the Word table for the line with line_id
     stmt = select(Word).where(Word.line_id == line.id)

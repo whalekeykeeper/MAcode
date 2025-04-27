@@ -33,6 +33,14 @@ async def process_video(
     """
     Process a video request, download, parse, and store data.
     """
+    stmt = select(User).where(User.uuid == uuid)
+    user = (await session.execute(stmt)).scalar_one_or_none()
+    if not user:
+        logger.warning(f"User not found. Creating a new user for uuid={uuid}")
+        user = User(uuid=uuid, video_ids=[], word_ids=[])
+        session.add(user)
+        await session.flush()
+
     logger.debug("Starting process_video endpoint")
     if not uuid:
         logger.error("UUID header is missing")
@@ -221,8 +229,10 @@ async def record_chosen_words(
         user_id=user.id,
         session=session
     )
+    logger.debug(f"===== Start to print: Print the chosen word:")
     for word in chosen_words:
         logger.debug(f"=====Chosen word: {word}")
+    logger.debug(f"===== Printing ends.")
     if len(chosen_words) != 0:
         return VideoChosenWordsResponse(
             chosen_words=chosen_words,

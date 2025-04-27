@@ -1,5 +1,7 @@
 """Main FastAPI app instance declaration."""
 
+import logging
+
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -8,6 +10,7 @@ from app.api.api import api_router
 from app.core import config
 from app.core.logger import logger
 
+logging.basicConfig(level=logging.DEBUG)
 app = FastAPI(
     title=config.settings.PROJECT_NAME,
     version=config.settings.VERSION,
