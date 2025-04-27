@@ -4,8 +4,7 @@ from typing import Dict, List, Tuple
 import spacy
 
 from app.core.logger import logger
-from app.core.utils.cefr_level_detector import detect_cefr_level, load_cefr_lookup, map_spacy_pos_to_cefrj
-from app.core.utils.word_candidate_filter import filter_pipeline
+from app.core.utils.word_candidate_filter import is_valid_candidate
 
 logger = logging.getLogger(__name__)
 
@@ -16,8 +15,9 @@ NLP_ZH = spacy.load("zh_core_web_lg")
 def analyze_text(
         lines_dict: dict[int, str],
         language: str,
-        cefr_lookup: dict
-) -> Tuple[List[Dict[str, List[int]]], List[Dict[str, str]], List[Tuple[str, str, str]]]:
+        cefr_lookup: dict,
+        prevalence_lookup: dict,
+) -> Tuple[List[Dict[str, List[int]]], List[Dict[str, str]]]:
     """
     Analyzes the text to map sentences and tokens to lines.
 
@@ -25,16 +25,13 @@ def analyze_text(
         lines_dict: Dictionary where keys are unique line IDs and values are the text lines
         language: The language of the text (either "zh" or "en")
         cefr_lookup: {(lemma, pos): level}
+        prevalence_lookup: {word: prevalence}
 
     Returns:
-        - A collection of sentences where each sentence has:
-          line_ids and sentence_text.
-        - A collection of tokens where each token has:
-          line_id, text, lemma, pos, cefr, and vector.
-        - - List of (lemma, pos, level) that are A1/A2/B1 filtered
+        - A collection of sentences where each sentence has: line_ids and sentence_text.
+        - A collection of tokens where each token has: line_id, text, lemma, pos, cefr, and vector.
     """
     nlp = NLP_ZH if language == "zh" else NLP_EN
-
     # Different joining strategy for Chinese and English
     joined_text = "".join(lines_dict.values()) if language == "zh" else " ".join(lines_dict.values())
     doc = nlp(joined_text)
@@ -100,48 +97,20 @@ def analyze_text(
     #         word_embedding = last_hidden_states[0][token_indices].mean(dim=0)
     #         word_embeddings[word] = word_embedding.numpy()
 
-    # A1/A2/B1 Filtering preparation
-    a1_a2_b1_lemma_pos_list = []
-    for token in doc:
-        if language == "zh":
-            continue
-
-        cefr_level = detect_cefr_level(token.lemma_.lower(), token.pos_, cefr_lookup)
-        if cefr_level in ["A1", "A2", "B1"]:
-            a1_a2_b1_lemma_pos_list.append((token.lemma_.lower(), map_spacy_pos_to_cefrj(token.pos_), cefr_level))
-            logger.info(
-                f"[FILTERED OUT] Word to be filtered: lemma='{token.lemma_}', POS='{token.pos_}', CEFR='{cefr_level}'"
-            )
-    a1_a2_b1_lemma_pos_list = list(set(a1_a2_b1_lemma_pos_list))
-
-    if language == "en":
-        cefr_level = detect_cefr_level(token.lemma_, token.pos_, cefr_lookup)
-        if cefr_level:
-            logger.info(
-                f"[CEFR MATCH] lemma='{token.lemma_}', mapped_pos='{map_spacy_pos_to_cefrj(token.pos_)}', CEFR level='{cefr_level}'"
-            )
-
     # Process tokens
     for token in doc:
 
         # For debugging
-        if token.lemma in ("block, book, century, change, create, early, feel, human, idea, imagination, "
+        if token.lemma in ("new, book, century, change, create, early, feel, human, idea, imagination, "
                            "include, know, large, mean, place, spread, start, thing, think, time, "
                            "use, work, big").split(", "):
             logger.info(f"!!!!!_____!!!!!!should be either a1 or a2: {cefr_dict[token.lemma]}")
 
-        mapped_pos = map_spacy_pos_to_cefrj(token.pos_)
-
-        if language == "en":
-            # Filter out low-level CEFR words
-            if (token.lemma_.lower(), mapped_pos) in a1_a2_b1_lemma_pos_list:
-                # logger.info(
-                #     f"[FILTERED OUT] Skipped token due to CEFR filter: lemma='{token.lemma_}', mapped_pos='{mapped_pos}'"
-                # )
-                continue
-
-        # Filter tokens based on linguistic criteria: punctuation, stop words, POS.
-        if not filter_pipeline(language, token.lemma_, token.pos_, token.text):
+        # Use pre-processing rules to decide if we keep this work or not.
+        is_valid_word, cefr_level = is_valid_candidate(language, token.lemma_, token.pos_, token.text, cefr_lookup,
+                                                       prevalence_lookup,
+                                                       NLP_EN, NLP_ZH)
+        if not is_valid_word:
             # logger.debug(
             #     f"[TOKEN FILTER] Token did not pass linguistic filter: lemma='{token.lemma_}', pos='{token.pos_}', text='{token.text}'")
             continue
@@ -163,49 +132,16 @@ def analyze_text(
                 "text": token.text,
                 "lemma": token.lemma_.lower(),
                 "pos": token.pos_,
-                "cefr": detect_cefr_level(token.lemma_.lower(), token.pos_, cefr_lookup),
+                "cefr": cefr_level,
                 "vector": token.vector.tolist() if token.has_vector else None
                 # # If use word embeddings from BERT MULTILINGUAL
                 # "vector": embedding[token.text] if embedding is not None else None
             })
-            logger.debug(
-                f"[TOKEN ADD] Added token: lemma='{token.lemma_}', pos='{token.pos_}', line_id={line_id}"
-            )
-    return sentence_collection, token_collection, a1_a2_b1_lemma_pos_list
+            # logger.debug(
+            #     f"[TOKEN ADD] Added token: lemma='{token.lemma_}', pos='{token.pos_}', cefr='{cefr_level}', line_id={line_id}"
+            # )
+    return sentence_collection, token_collection
 
 
 if __name__ == "__main__":
-    # Prepare test data
-    lines_dict = {
-        1: "Technology has changed human life dramatically.",
-        2: "People invented many new tools to improve communication."
-    }
-    language = "en"
-    cefr_lookup = load_cefr_lookup()
-
-    # Analyze
-    sentences, tokens, a1_a2_b1 = analyze_text(lines_dict, language, cefr_lookup)
-
-    # Print sentences
-    print("\n===Sentences parsed ===")
-    for sent in sentences:
-        print(f"- {sent['sentence_text']} (lines: {sent['line_ids']})")
-
-    # Print tokens kept
-    print("\n=== Tokens kept ===")
-    for token in tokens:
-        cefr_level_display = token['cefr'] if token['cefr'] else "Unknown"
-        print(
-            f"- Lemma: {token['lemma']}, Text: {token['text']}, POS: {token['pos']}, CEFR Level: {cefr_level_display}")
-
-    # Print words that were filtered out due to being A1/A2/B1 (optional)
-    if a1_a2_b1:
-        print("\n===Words filtered out (A1/A2/B1 level) ===")
-        for lemma, pos, cefr in a1_a2_b1:
-            print(f"- {lemma} ({pos}), CEFR Level: {cefr}")
-
-    # Print unknown CEFR words
-    print("\n===Unknown CEFR Words (Not found in CEFR lookup) ===")
-    for token in tokens:
-        if not token['cefr']:
-            print(f"- Lemma: {token['lemma']}, POS: {token['pos']}, Text: {token['text']}")
+    pass

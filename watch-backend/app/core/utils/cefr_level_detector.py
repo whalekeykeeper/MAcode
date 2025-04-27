@@ -304,14 +304,13 @@ def load_cefr_lookup(csv_path: str = None) -> dict:
 
     for _, row in cefr_data.iterrows():
         lemma = row['headword'].strip().lower()
-        original_pos = row['pos'].strip().upper()  # SpaCy POS originally
+        original_pos = row['pos'].strip().lower()
         cefr_level = row['CEFR'].strip().upper()
 
-        mapped_pos = map_spacy_pos_to_cefrj(original_pos)
-        if mapped_pos == "other":
-            continue  # Skip weird POS
+        if original_pos == "other":
+            continue
 
-        key = (lemma, mapped_pos.lower())
+        key = (lemma, original_pos)
         if key not in cefr_lookup:
             cefr_lookup[key] = cefr_level
 
@@ -331,24 +330,15 @@ def detect_cefr_level(lemma: str, spacy_pos: str, cefr_lookup: dict) -> str:
     Returns:
         str: CEFR level ("A1", "A2", "B1", "B2", etc.) or empty string if not found
     """
-    mapped_pos = map_spacy_pos_to_cefrj(spacy_pos)
-    key = (lemma.lower().strip(), mapped_pos.lower().strip())
-
-    cefr_level = cefr_lookup.get(key, "")
-
-    # if cefr_level:
-    #     logger.debug(
-    #         f"[CEFR DETECTED] Found CEFR level: lemma='{lemma}', SpaCy POS='{spacy_pos}', "
-    #         f"Mapped POS='{mapped_pos}', CEFR='{cefr_level}'"
-    #     )
-    # else:
-    #     logger.debug(
-    #         f"[CEFR NOT FOUND] No CEFR level: lemma='{lemma}', SpaCy POS='{spacy_pos}', "
-    #         f"Mapped POS='{mapped_pos}', Checked Key={key}"
-    #     )
-
-    return cefr_level
+    lemma = lemma.lower().strip()
+    mapped_pos = map_spacy_pos_to_cefrj(spacy_pos)  # still need mapping SpaCy POS -> CEFR_POS
+    key = (lemma, mapped_pos.lower())
+    # print(f"Checking key: {key}")
+    return cefr_lookup.get(key, "unknown")
 
 
 if __name__ == "__main__":
-    pass
+    d = {"apple": "NOUN", "outsider": "NOUN", "safe": "ADJ", "new": "ADJ"}
+    for lemma, pos in d.items():
+        cefr_level = detect_cefr_level(lemma.lower(), pos, load_cefr_lookup())
+        print(cefr_level)

@@ -34,9 +34,11 @@ PROJECT_DIR = Path(__file__).parent.parent.parent
 with open(f"{PROJECT_DIR}/pyproject.toml", "rb") as f:
     PYPROJECT_CONTENT = tomllib.load(f)["tool"]["poetry"]
 
-ROOT_DIR = Path(__file__).parent.parent.parent  # root directory
+STATIC_DIR = PROJECT_DIR / "static"
 
-STATIC_DIR = ROOT_DIR / "static"
+APP_DIR = PROJECT_DIR / "app"
+RESOURCES_DIR = APP_DIR / "resources"
+ENGLISH_WORD_PREVALENCES_PATH = RESOURCES_DIR / "English_Word_Prevalences.xlsx"
 
 
 class Settings(BaseSettings):

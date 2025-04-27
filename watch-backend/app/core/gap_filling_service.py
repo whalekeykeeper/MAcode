@@ -125,6 +125,7 @@ async def find_top_candidates(graph_id: int,
 
     node_data = {
         node.id: {
+            "id": node.id,
             "graph_id": node.graph_id,
             "lemma": node.lemma,
             "mastery": node.mastery,
@@ -339,7 +340,7 @@ async def create_distractors(chosen_node: Dict[str, Any], graph_id: int, session
     for edge in edges:
         G.add_edge(edge.node1_id, edge.node2_id)
 
-    target_node_id = chosen_node["graph_id"]
+    target_node_id = chosen_node["id"]
     distractors = []
     current_distance = 2  # Start from distance 2 (skipping immediate neighbors)
     max_attempts = 5  # Limit the number of attempts to find a path

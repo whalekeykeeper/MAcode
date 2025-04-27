@@ -20,7 +20,7 @@ from app.core.config import STATIC_DIR
 from app.core.logger import logger
 from app.core.utils.analyze_text import analyze_text
 from app.core.utils.cefr_level_detector import load_cefr_lookup
-from app.core.utils.word_candidate_filter import filter_pipeline
+from app.core.utils.prevalence_detector import load_prevalence
 from app.models import Line, Sentence, Word
 from app.models import User, Video
 
@@ -98,15 +98,16 @@ class SubtitleProcessor:
         # Create lines (word_ids are empty for now) and return a mapping.
         lines_dict_bi = await self._create_line_entries(subtitle_lines, video.id, session)
 
+        cefr_lookup = load_cefr_lookup()
+        prevalence_lookup = load_prevalence()
         # Parse lines_dict to get sentences and tokens
         for language in ["zh", "en"]:
-            cefr_lookup = load_cefr_lookup()
-            sentence_collection, token_collection, a1_a2_b1_lemma_pos_list = analyze_text(
-                lines_dict_bi[language], language, cefr_lookup
+            sentence_collection, token_collection = analyze_text(
+                lines_dict_bi[language], language, cefr_lookup, prevalence_lookup
             )
             # Create sentence entries and word entries basing on sentence_data_list and token_data_list
             await self._create_sentence_word_entries(sentence_collection, token_collection, language, video.id,
-                                                     a1_a2_b1_lemma_pos_list, session)
+                                                     session)
 
         await self._update_word_ids_and_texts(
             video, user, full_zh_text, full_en_text, session
@@ -306,10 +307,9 @@ class SubtitleProcessor:
                                             token_collection: List[Dict[str, str]],
                                             language: str,
                                             video_id: int,
-                                            a1_a2_b1_lemma_pos_list: List[Tuple[str, str, str]],
                                             session: AsyncSession,
                                             ) -> None:
-        """Create Sentence and Word entries, while filtering out low-CEFR level tokens immediately."""
+        """Create Sentence and Word entries"""
         logger.info(f"Creating {len(sentence_collection)} sentences for language={language}...")
 
         # Step 1: Create sentences
@@ -351,15 +351,6 @@ class SubtitleProcessor:
         # Create all Word objects
         for token_data in token_collection:
             cefr_level = token_data.get("cefr", "")
-            if cefr_level in ["A1", "A2", "B1"]:
-                # logger.debug(f"[SKIP-CEFR] Skipped {token_data['lemma']} ({token_data['pos']}) at CEFR {cefr_level}")
-                dropped_by_cefr += 1
-                continue
-
-            if not filter_pipeline(language, token_data["lemma"], token_data["pos"], token_data["text"]):
-                # logger.debug(f"[SKIP-FILTER] Skipped {token_data['lemma']} ({token_data['pos']}) by filter pipeline.")
-                dropped_by_filter += 1
-                continue
 
             word_vector = token_data.get("vector", None)
             if word_vector is not None:
@@ -380,8 +371,6 @@ class SubtitleProcessor:
         await session.commit()
 
         logger.info(f"=====Created {len(word_objs)} Word entries for {language}.")
-        logger.info(f"=====Dropped {dropped_by_cefr} tokens by CEFR level (A1/A2/B1).")
-        logger.info(f"=====Dropped {dropped_by_filter} tokens by linguistic filter.")
 
         # Update internal stats
         self.new_video_stats[language]["new_sentences"] = len(sentence_objs)
