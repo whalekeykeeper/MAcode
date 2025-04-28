@@ -1,0 +1,180 @@
+lemma,word_infos
+new,new;ADJ;
+able,able;ADJ;
+fast,fast;ADJ;
+free,free;ADJ;
+good,good;ADJ;
+slow,slow;ADJ;
+axon,axon;NOUN; | axon;NOUN; | axon;NOUN; | axon;NOUN;
+close,close;ADJ;
+cord,cord;NOUN;
+daily,daily;ADJ;
+ease,ease;NOUN;B2
+elite,elite;ADJ;
+fatty,fatty;ADJ; | fatty;ADJ;
+great,great;ADJ;
+grey,grey;NOUN; | grey;NOUN; | grey;NOUN;
+inner,inner;ADJ;
+magic,magic;ADJ;
+mode,mode;NOUN;
+test,test;VERB;B2
+vivid,vivid;ADJ;
+white,white;ADJ; | white;ADJ; | white;ADJ;
+cable,cable;NOUN;B2
+common,common;ADJ;
+fiber,fiber;NOUN; | fiber;NOUN;
+focus,focus;NOUN;B2
+handed,handed;ADJ;
+nearly,nearly;ADV;
+nerve,nerve;NOUN;B2 | nerve;NOUN;B2 | nerve;NOUN;B2
+neural,neural;ADJ; | neural;ADJ; | neural;ADJ; | neural;ADJ;
+recent,recent;ADJ;
+simply,simply;ADV;
+slowly,slowly;ADV;
+spinal,spinal;ADJ;
+average,average;ADJ;
+correct,correct;ADJ;
+current,current;ADJ;
+energy,energy;NOUN;B2
+finally,finally;ADV;
+laptop,laptop;NOUN;B2
+limited,limited;ADJ;
+master,master;VERB; | master;VERB;
+motion,motion;NOUN;B2 | motion;NOUN;B2 | motion;NOUN;B2
+myelin,myelin;NOUN; | myelin;NOUN; | myelin;NOUN;
+sensory,sensory;ADJ;
+sheath,sheath;NOUN; | sheath;NOUN;
+similar,similar;ADJ;
+Myelin,Myelin;PROPN;
+allotted,allotted;ADJ;
+frequent,frequent;ADJ;
+mastery,mastery;NOUN;B2
+mentally,mentally;ADV;
+multiple,multiple;ADJ;
+pathway,pathway;NOUN; | pathway;NOUN; | pathway;NOUN;
+physical,physical;ADJ; | physical;ADJ; | physical;ADJ;
+process,process;VERB;B2
+unravel,unravel;VERB;
+working,working;NOUN;
+airplane,airplane;NOUN;
+correctly,correctly;ADV;
+covering,covering;NOUN;
+duration,duration;NOUN;
+effective,effective;ADJ; | effective;ADJ; | effective;ADJ; | effective;ADJ; | effective;ADJ;
+efficient,efficient;ADJ;
+gradually,gradually;ADV;
+incorrect,incorrect;ADJ;
+insulate,insulate;VERB;
+intensely,intensely;ADV;
+maximize,maximize;VERB;
+meantime,meantime;NOUN;
+minimize,minimize;VERB;
+potential,potential;ADJ;
+practice,practice;VERB; | practice;VERB; | practice;VERB; | practice;VERB;
+quantify,quantify;VERB;B2
+stimulus,stimulus;NOUN;
+Facebook,Facebook;PROPN;
+attribute,attribute;VERB;B2
+consistent,consistent;ADJ;
+electrical,electrical;ADJ; | electrical;ADJ;
+individual,individual;ADJ;
+physically,physically;ADV;
+pirouette,pirouette;NOUN;
+reinforce,reinforce;VERB;B2
+substance,substance;NOUN;B2
+surprising,surprising;ADJ;
+efficiently,efficiently;ADV;
+experienced,experienced;ADJ;
+insulation,insulation;NOUN; | insulation;NOUN;
+repetition,repetition;NOUN;B2 | repetition;NOUN;B2 | repetition;NOUN;B2 | repetition;NOUN;B2 | repetition;NOUN;B2
+smartphone,smartphone;NOUN;
+distraction,distraction;NOUN;B2 | distraction;NOUN;B2
+intermediate,intermediate;ADJ;
+myelination,myelination;NOUN;
+particularly,particularly;ADV;
+coordination,coordination;NOUN;
+superhighway,superhighway;NOUN;
+effectiveness,effectiveness;NOUN;B2
+understanding,understanding;NOUN;B2
+Martin,Martin;PROPN;
+Luther,Luther;PROPN;
+Civil,Civil;PROPN;
+Rights,Rights;PROPN;
+state,state;VERB;B2
+internalize,internalize;VERB;
+manifest,manifest;VERB;
+genocide,genocide;NOUN; | genocide;NOUN;
+challenge,challenge;VERB;B2
+recognize,recognize;VERB;
+safe,safe;ADJ; | safe;ADJ;
+intimacy,intimacy;NOUN;
+core,core;ADJ;
+critically,critically;ADV;
+consciously,consciously;ADV;
+clearly,clearly;ADV;
+realize,realize;VERB; | realize;VERB;
+honest,honest;ADJ;
+catholic,catholic;ADJ;
+New,New;PROPN;
+Orleans,Orleans;PROPN;
+Lent,Lent;PROPN;
+meaningful,meaningful;ADJ;
+sacrifice,sacrifice;VERB; | sacrifice;VERB;
+typically,typically;ADV;
+indulge,indulge;VERB;B2
+God,God;PROPN;B2
+sanctity,sanctity;NOUN;
+McDonald,McDonald;PROPN;
+french,french;ADJ; | french;ADJ;
+valuable,valuable;ADJ;
+long,long;ADJ;
+ago,ago;ADV;
+instead,instead;ADV; | instead;ADV;
+conscience,conscience;NOUN;B2
+appease,appease;VERB;
+ignorance,ignorance;NOUN;B2
+unaware,unaware;ADJ;
+validation,validation;NOUN;
+endorse,endorse;VERB;B2
+Christian,Christian;PROPN; | Christian;PROPN;
+gay,gay;ADJ;
+locker,locker;NOUN;
+bolt,bolt;NOUN;B2
+homeless,homeless;ADJ; | homeless;ADJ;
+merely,merely;ADV;
+affirmation,affirmation;NOUN;
+worth,worth;ADJ;
+concerned,concerned;ADJ;
+actually,actually;ADV;
+fundraising,fundraising;NOUN;
+gala,gala;NOUN;
+proud,proud;ADJ;
+hard,hard;ADJ;
+poor,poor;ADJ;
+unintelligent,unintelligent;ADJ;
+apparently,apparently;ADV;
+dignity,dignity;NOUN;B2
+rarely,rarely;ADV;
+residue,residue;NOUN;
+flaw,flaw;NOUN;B2
+gut,gut;NOUN;
+wrench,wrench;NOUN;
+guillotine,guillotine;NOUN;
+retreat,retreat;VERB;B2
+rwandan,rwandan;ADJ;
+Katrina,Katrina;PROPN;
+noose,noose;NOUN;
+char,char;VERB;
+privilege,privilege;NOUN;B2
+indecision,indecision;NOUN;
+sanctuary,sanctuary;NOUN;
+bravery,bravery;NOUN;B2
+brilliance,brilliance;NOUN;
+human,human;ADJ;
+transcendentalism,transcendentalism;NOUN;
+Thoreau,Thoreau;PROPN;
+microphone,microphone;NOUN;B2
+tuck,tuck;VERB;
+underside,underside;NOUN;
+inhibition,inhibition;NOUN;
+soapbox,soapbox;NOUN;
