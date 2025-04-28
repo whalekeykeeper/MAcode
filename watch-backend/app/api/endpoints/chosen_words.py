@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api import deps
 from app.core.logger import logger
-from app.models import ChosenWords, GraphNode, User, Graph
+from app.models import ChosenWords, GraphNode, User, Graph, Word
 
 """
 This file contains endpoints to show a collection of words as a table. Word data is sent with word id.
@@ -51,8 +51,12 @@ async def get_word_list(
             stmt = select(GraphNode).where(GraphNode.lemma == chosen_word.lemma, GraphNode.graph_id == graph.id)
             graph_node = (await session.execute(stmt)).scalar_one_or_none()
 
+            stmt = select(Word).where(Word.id == chosen_word.word_id)
+            word = (await session.execute(stmt)).scalar_one_or_none()
+            if not word:
+                break
             display_word_list.append(
-                (chosen_word.word_id, chosen_word.marked_as_learned, chosen_word.lemma, chosen_word.translation,
+                (chosen_word.word_id, chosen_word.marked_as_learned, word.word, chosen_word.translation,
                  chosen_word.sentence,
                  graph_node.mastery, chosen_word.record_time))
             # logger.debug(
