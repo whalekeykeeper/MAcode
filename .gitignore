@@ -12,3 +12,4 @@ watch-backend/.vscode/launch.json
 watch-backend/app/resources/glove.840B.300d.txt
 watch-backend/tools/static_archive
 /watch-backend/static_archive
+watch-backend/app/core/utils/toDel.py
