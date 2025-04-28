@@ -1,5 +1,6 @@
 # Description: Service for generating gap-filling exercises based on a user's graph.
 import random
+import time
 from typing import Dict, Any, List
 
 import networkx as nx
@@ -13,6 +14,8 @@ from app.models import GapFillingTable
 from app.models import GraphEdge
 from app.models import Word, Line, Sentence, GraphNode
 from app.schemas.responses import GapFillingResponse
+
+nlp_en = spacy.load("en_core_web_lg")
 
 
 # def generate_prompt(self, row):
@@ -62,18 +65,43 @@ async def generate_gap_filling_exercises(user_id: int, graph_id: int, session: A
     Returns:
         list: A list of GapFillingResponse objects.
     """
+    start_time = time.time()
+
     top_candidates = await find_top_candidates(graph_id, session, exercise_number=exercise_number)
     chosen_nodes = random.sample(list(top_candidates.keys()), k=min(exercise_number, len(top_candidates)))
 
-    exercises = []
+    # === Preload Word, Line, Sentence ===
+    words_stmt = select(Word)
+    words = (await session.execute(words_stmt)).scalars().all()
+    word_id_to_word = {word.id: word for word in words}
+    word_text_to_words = {}
+    for word in words:
+        word_text_to_words.setdefault(word.word, []).append(word)
 
+    lines_stmt = select(Line)
+    lines = (await session.execute(lines_stmt)).scalars().all()
+    line_id_to_line = {line.id: line for line in lines}
+
+    sentences_stmt = select(Sentence).where(Sentence.language == "en")
+    sentences = (await session.execute(sentences_stmt)).scalars().all()
+    sentence_id_to_sentence = {sentence.id: sentence for sentence in sentences}
+
+    preload_data = {
+        "word_id_to_word": word_id_to_word,
+        "word_text_to_words": word_text_to_words,
+        "line_id_to_line": line_id_to_line,
+        "sentence_id_to_sentence": sentence_id_to_sentence,
+    }
+    # === End Preload ===
+
+    exercises = []
     for node_id in chosen_nodes:
         node = top_candidates[node_id]
-        logger.debug(f"-------Chosen node: {top_candidates[node_id]['lemma']}， node_id: {node_id}")
+        # logger.debug(f"-------Chosen node: {top_candidates[node_id]['lemma']}， node_id: {node_id}")
 
         # todo：it should be the case that for one node, three sentences, not for each unique word_text, debug for this
         #  issue
-        select_list = await create_masked_sentence(node, session)
+        select_list = await create_masked_sentence(node, session, preload_data)
         distractors = await create_distractors(node, graph_id, session)
 
         gap_filling_entry = GapFillingTable(
@@ -97,6 +125,10 @@ async def generate_gap_filling_exercises(user_id: int, graph_id: int, session: A
 
     await session.commit()
     logger.debug(f"========Exercises: {exercises}")
+    end_time = time.time()
+    duration = end_time - start_time
+    logger.info(f"Generated {len(exercises)} exercises for user {user_id} in {duration:.2f} seconds.")
+
     return exercises
 
 
@@ -183,7 +215,8 @@ async def get_closeness_centrality(graph_id: int, session: AsyncSession):
     return closeness_centrality
 
 
-async def create_masked_sentence(chosen_node: Dict[str, Any], session: AsyncSession) -> List[Dict[str, Any]]:
+async def create_masked_sentence(chosen_node: Dict[str, Any], session: AsyncSession, preload_data: Dict[str,
+Any]) -> List[Dict[str, Any]]:
     """
     Create masked sentences for one chosen node by masking the words.
     For each node, we find the unique word_texts and then find all sentences containing that word.
@@ -193,37 +226,40 @@ async def create_masked_sentence(chosen_node: Dict[str, Any], session: AsyncSess
     Args:
         chosen_node (Dict[str, Any]): The chosen node data. It has two keys: "node_data" and "sent_text".
         session (AsyncSession): The database session.
+        preload_data (Dict[str, Any]): Preloaded data
     Returns:
         select_list: A list with two dictionaries. Each dictionary contains two keys ""word_text" and
         "masked_sentences". word_text is the word_text in the sentence, masked_sentences is a list of masked sentences.
        
     """
-    # Load the Spacy model for tokenization
-    nlp_en = spacy.load("en_core_web_lg")
+    # Use the preloaded data
+    word_id_to_word = preload_data["word_id_to_word"]
+    word_text_to_words = preload_data["word_text_to_words"]
+    line_id_to_line = preload_data["line_id_to_line"]
+    sentence_id_to_sentence = preload_data["sentence_id_to_sentence"]
 
-    # Step 1: Gather unique word_texts from the given word_ids
+    # Use the globally loaded Spacy model
+    global nlp_en
+
+    word_id_to_word = preload_data["word_id_to_word"]
+    word_text_to_words = preload_data["word_text_to_words"]
+    line_id_to_line = preload_data["line_id_to_line"]
+    sentence_id_to_sentence = preload_data["sentence_id_to_sentence"]
+
     word_texts = set()
     for word_id in chosen_node["word_ids"]:
-        word_stmt = select(Word).where(Word.id == word_id)
-        word = (await session.execute(word_stmt)).scalar_one_or_none()
+        word = word_id_to_word.get(word_id)
         if word:
             word_texts.add(word.word)
 
-    # Step 2: For each unique word_text, find all sentences containing that word
     word_text_masked_sentence_dict = {}
     for word_text in word_texts:
-        # Find all words with the same word_text
-        words_stmt = select(Word).where(Word.word == word_text)
-        words = (await session.execute(words_stmt)).scalars().all()
-
-        # Collect all sentences for these words
+        words = word_text_to_words.get(word_text, [])
         sentences = set()
         for word in words:
-            line_stmt = select(Line).where(Line.id == word.line_id)
-            line = (await session.execute(line_stmt)).scalar_one_or_none()
+            line = line_id_to_line.get(word.line_id)
             if line:
-                sentence_stmt = select(Sentence).where(Sentence.id == line.sentence_id and Sentence.language == "en")
-                sentence = (await session.execute(sentence_stmt)).scalar_one_or_none()
+                sentence = sentence_id_to_sentence.get(line.sentence_id)
                 if sentence:
                     sentences.add(sentence.sentence_text)
 
@@ -247,7 +283,7 @@ async def create_masked_sentence(chosen_node: Dict[str, Any], session: AsyncSess
         word = list(word_text_masked_sentence_dict.keys())[0]
         sentences = word_text_masked_sentence_dict[word]
         d["word"] = word
-        if len(word_text_masked_sentence_dict.values()) <= 3:
+        if len(sentences) <= 3:
             # We choose all the sentences
             d["sentences"] = sentences
             select_list.append(d)
@@ -393,8 +429,9 @@ async def create_distractors(chosen_node: Dict[str, Any], graph_id: int, session
             current_distance += 1
 
         except NetworkXNoPath:
-            logger.warning(
-                f"No path found between node {target_node_id} and some nodes at distance {current_distance}.")
+            # logger.warning(
+            #     f"No path found between node {target_node_id} and some nodes at distance {current_distance}.")
+
             # Handle the case where no path is found
             # You might want to skip this distance or use a fallback strategy
             current_distance += 1
