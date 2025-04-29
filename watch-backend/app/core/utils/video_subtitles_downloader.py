@@ -52,7 +52,10 @@ def get_ytb_id(video_url: str) -> str:
     """
     A function to extract ytb_id from video_url.
     """
-    return extract.video_id(video_url)
+    try:
+        return extract.video_id(video_url)
+    except RegexMatchError:
+        raise ValueError("Invalid YouTube URL format")
 
 
 def _download_youtube_video(ytb_id: str, video_url: str, static_folder: Path) -> None:

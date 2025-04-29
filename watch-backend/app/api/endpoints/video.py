@@ -67,8 +67,24 @@ async def process_video(
     try:
         url = video_request.video_url
         logger.debug(f"Processing video URL: {url}")
-        ytb_id = get_ytb_id(url)
+
+        ###
+        try:
+            ytb_id = get_ytb_id(url)
+        except ValueError as e:
+            logger.warning(f"Invalid YouTube URL received: {url}")
+            raise HTTPException(status_code=400, detail=str(e))
+        except Exception as e:
+            logger.error(f"Transaction failed: {str(e)}")
+            await session.rollback()
+            raise HTTPException(status_code=500, detail=f"Failed to process video request: {str(e)}")
+        finally:
+            elapsed_time = time.time() - start_time
+            logger.info(f"Elapsed time: {elapsed_time:.2f} seconds")
+
         logger.debug(f"Extracted YouTube ID: {ytb_id}")
+        ###
+
         static_folder = Path(__file__).parent.parent.parent.parent / "static"
 
         existing_video = await get_existing_video(ytb_id, session)
