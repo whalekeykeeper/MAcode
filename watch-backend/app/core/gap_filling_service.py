@@ -232,15 +232,8 @@ Any]) -> List[Dict[str, Any]]:
         "masked_sentences". word_text is the word_text in the sentence, masked_sentences is a list of masked sentences.
        
     """
-    # Use the preloaded data
-    word_id_to_word = preload_data["word_id_to_word"]
-    word_text_to_words = preload_data["word_text_to_words"]
-    line_id_to_line = preload_data["line_id_to_line"]
-    sentence_id_to_sentence = preload_data["sentence_id_to_sentence"]
-
-    # Use the globally loaded Spacy model
+    # Use the preloaded data and the globally loaded Spacy model
     global nlp_en
-
     word_id_to_word = preload_data["word_id_to_word"]
     word_text_to_words = preload_data["word_text_to_words"]
     line_id_to_line = preload_data["line_id_to_line"]
@@ -261,13 +254,18 @@ Any]) -> List[Dict[str, Any]]:
             if line:
                 sentence = sentence_id_to_sentence.get(line.sentence_id)
                 if sentence:
-                    sentences.add(sentence.sentence_text)
+                    if word_text in sentence.sentence_text:
+                        sentences.add(sentence.sentence_text)
+                        # 特殊情况，当line-sentence是一对多的时候，直接用line的text，避免失去文本。
+                        # todo：更深层次debug
+                    elif word_text in line.line_text:
+                        sentences.add(line.line_text)
 
         # Mask all the word_text occurrence in each sentence
         # TODO: we put sentence's texts into a list directly, but in the future, we should use sentence_id here to reduce the size of the data.
         masked_sentences = []
-        for sentence_text in sentences:
-            doc = nlp_en(sentence_text)
+        for sentence_tor_line_text in sentences:
+            doc = nlp_en(sentence_tor_line_text)
             masked_sentence = [
                 "____" if token.text.strip().lower() == word_text.strip().lower() else token.text
                 for token in doc
