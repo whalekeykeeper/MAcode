@@ -4,7 +4,6 @@ from pathlib import Path
 from typing import Optional, List, Dict, Union
 
 import numpy as np
-import spacy
 from fastapi import HTTPException
 from sqlalchemy import select, delete, func
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,13 +11,14 @@ from tqdm import tqdm
 
 from app.core.logger import logger
 from app.core.utils.bilingual_subtitle_creator import create_bilingual_vtt
+from app.core.utils.nlp import get_nlp_en, get_nlp_zh
 from app.core.utils.subtitle_processor import SubtitleProcessor
 from app.core.utils.video_subtitles_downloader import download_video_and_subtitles
 from app.models import Video, User, Families, Graph, Vocabulary, Word, GraphNode, GraphEdge
 
 # Load language models
-NLP_EN = spacy.load("en_core_web_lg")
-NLP_ZH = spacy.load("zh_core_web_lg")
+NLP_EN = get_nlp_en()
+NLP_ZH = get_nlp_zh()
 VALID_POS = ["NOUN", "VERB", "ADJ", "ADV", "PROPN", "INTJ"]
 
 

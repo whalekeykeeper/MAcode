@@ -1,10 +1,10 @@
 from typing import Dict, List, Tuple
 
-import spacy
+from nlp import get_nlp_en, get_nlp_zh
 
 # Load English and Chinese models
-nlp_en = spacy.load("en_core_web_lg")
-nlp_zh = spacy.load("zh_core_web_lg")
+nlp_en = get_nlp_en()
+nlp_zh = get_nlp_zh()
 
 
 # def analyze_text(lines_dict):
@@ -102,8 +102,8 @@ def analyze_text_2(
         - A collection of tokens where each token has:
           line_id, text, lemma, and pos.
     """
-    nlp_en = spacy.load("en_core_web_lg")
-    nlp_zh = spacy.load("zh_core_web_lg")
+    nlp_en = get_nlp_en()
+    nlp_zh = get_nlp_zh()
     nlp = nlp_zh if language == "zh" else nlp_en
 
     # Different joining strategy for Chinese and English

@@ -3,10 +3,9 @@
 import string
 from typing import Tuple
 
-import spacy
-
 from app.core.utils.cefr_level_detector import detect_cefr_level
 from app.core.utils.cefr_level_detector import load_cefr_lookup
+from app.core.utils.nlp import get_nlp_en, get_nlp_zh
 from app.core.utils.prevalence_detector import get_prevalence
 from app.core.utils.prevalence_detector import load_prevalence
 
@@ -133,8 +132,8 @@ def empty_string_filter(text):
 
 
 if __name__ == "__main__":
-    nlp_en = spacy.load("en_core_web_lg")
-    nlp_zh = spacy.load("zh_core_web_lg")
+    nlp_en = get_nlp_en()
+    nlp_zh = get_nlp_zh()
     cefr_lookup = load_cefr_lookup()
     prevalence_lookup = load_prevalence()
 

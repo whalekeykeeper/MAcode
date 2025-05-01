@@ -20,12 +20,13 @@ from app.core.config import STATIC_DIR
 from app.core.logger import logger
 from app.core.utils.analyze_text import analyze_text
 from app.core.utils.cefr_level_detector import load_cefr_lookup
+from app.core.utils.nlp import get_nlp_en, get_nlp_zh
 from app.core.utils.prevalence_detector import load_prevalence
 from app.models import Line, Sentence, Word
 from app.models import User, Video
 
-NLP_EN = spacy.load("en_core_web_lg")
-NLP_ZH = spacy.load("zh_core_web_lg")
+NLP_EN = get_nlp_en()
+NLP_ZH = get_nlp_zh()
 
 
 @dataclass

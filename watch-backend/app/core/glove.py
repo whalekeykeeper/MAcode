@@ -2,10 +2,11 @@ from pathlib import Path
 from typing import Any, Dict
 
 import numpy as np
-import spacy
+
+from utils.nlp import get_nlp_en
 
 # Load SpaCy models for English and Chinese
-nlp_en = spacy.load("en_core_web_lg")
+nlp_en = get_nlp_en()
 
 
 # Load GloVe embeddings

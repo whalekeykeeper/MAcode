@@ -49,7 +49,7 @@
 
 
 #
-# # nlp_zh = spacy.load("zh_core_web_lg")
+# # nlp_zh = get_nlp_zh()
 # # doc = nlp_zh(zh_text)
 # # for sent in doc.sents:
 # #     print(sent.text)
@@ -58,7 +58,7 @@
 # #     print([token.dep_ for token in sent])
 # #     print([token.head.text for token in sent])
 # #     print()
-# nlp_zh = spacy.load("zh_core_web_lg")
+# nlp_zh = get_nlp_zh()
 # doc = nlp_zh(zh_text)
 # for sent in doc.sents:
 #     print(sent.text)
@@ -190,12 +190,11 @@
 
 # Test the function
 
-
-import spacy
+from nlp import get_nlp_en, get_nlp_zh
 
 # Load English and Chinese models
-nlp_en = spacy.load("en_core_web_lg")
-nlp_zh = spacy.load("zh_core_web_lg")
+nlp_en = get_nlp_en()
+nlp_zh = get_nlp_zh()
 
 
 def map_sentences_to_lines(sentences, lines_dict):
@@ -289,11 +288,10 @@ if __name__ == "__main__":
     #         print("Yeah!!!")
     #     break
 
-    import spacy
     from spacy.lang.zh import Chinese
 
-    NLP_EN = spacy.load("en_core_web_lg")
-    NLP_ZH = spacy.load("zh_core_web_lg")
+    NLP_EN = get_nlp_en()
+    NLP_ZH = get_nlp_zh()
     # print(NLP_EN.tokenizer.rules)  # Get English tokenizer rules
     # print(NLP_ZH.tokenizer.rules)  # Get Chinese tokenizer rules
     text = "这是一段简体中文。需要进行分词。南京市长江大桥发表了讲话。他在北京大学学习画画。"

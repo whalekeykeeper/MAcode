@@ -1,15 +1,14 @@
 import logging
 from typing import Dict, List, Tuple
 
-import spacy
-
 from app.core.logger import logger
+from app.core.utils.nlp import get_nlp_en, get_nlp_zh
 from app.core.utils.word_candidate_filter import is_valid_candidate
 
 logger = logging.getLogger(__name__)
 
-NLP_EN = spacy.load("en_core_web_lg")
-NLP_ZH = spacy.load("zh_core_web_lg")
+NLP_EN = get_nlp_en()
+NLP_ZH = get_nlp_zh()
 
 
 def analyze_text(

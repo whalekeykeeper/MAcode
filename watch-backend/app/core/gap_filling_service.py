@@ -4,18 +4,18 @@ import time
 from typing import Dict, Any, List
 
 import networkx as nx
-import spacy
 from networkx.exception import NetworkXNoPath
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.logger import logger
+from app.core.utils.nlp import get_nlp_en
 from app.models import GapFillingTable
 from app.models import GraphEdge
 from app.models import Word, Line, Sentence, GraphNode
 from app.schemas.responses import GapFillingResponse
 
-nlp_en = spacy.load("en_core_web_lg")
+nlp_en = get_nlp_en()
 
 
 # def generate_prompt(self, row):
