@@ -31,7 +31,7 @@ async def export_families_to_csv(user_id: int):
                 word = (await session.execute(stmt_word)).scalar_one_or_none()
                 if word:
                     cefr_level = word.cefr if word.cefr else ""
-                    word_infos.append(f"{word.lemma};{word.pos};{cefr_level}")
+                    word_infos.append(f"{word.lemma};{word.word};{word.pos};{cefr_level}")
                 else:
                     logger.warning(f"Word with id {word_id} not found.")
             word_infos_str = " | ".join(word_infos)
