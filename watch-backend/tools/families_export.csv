@@ -1,180 +1,510 @@
 lemma,word_infos
-new,new;ADJ;
-able,able;ADJ;
-fast,fast;ADJ;
-free,free;ADJ;
-good,good;ADJ;
-slow,slow;ADJ;
-axon,axon;NOUN; | axon;NOUN; | axon;NOUN; | axon;NOUN;
-close,close;ADJ;
-cord,cord;NOUN;
-daily,daily;ADJ;
-ease,ease;NOUN;B2
-elite,elite;ADJ;
-fatty,fatty;ADJ; | fatty;ADJ;
-great,great;ADJ;
-grey,grey;NOUN; | grey;NOUN; | grey;NOUN;
-inner,inner;ADJ;
-magic,magic;ADJ;
-mode,mode;NOUN;
-test,test;VERB;B2
-vivid,vivid;ADJ;
-white,white;ADJ; | white;ADJ; | white;ADJ;
-cable,cable;NOUN;B2
-common,common;ADJ;
-fiber,fiber;NOUN; | fiber;NOUN;
-focus,focus;NOUN;B2
-handed,handed;ADJ;
-nearly,nearly;ADV;
-nerve,nerve;NOUN;B2 | nerve;NOUN;B2 | nerve;NOUN;B2
-neural,neural;ADJ; | neural;ADJ; | neural;ADJ; | neural;ADJ;
-recent,recent;ADJ;
-simply,simply;ADV;
-slowly,slowly;ADV;
-spinal,spinal;ADJ;
-average,average;ADJ;
-correct,correct;ADJ;
-current,current;ADJ;
-energy,energy;NOUN;B2
-finally,finally;ADV;
-laptop,laptop;NOUN;B2
-limited,limited;ADJ;
-master,master;VERB; | master;VERB;
-motion,motion;NOUN;B2 | motion;NOUN;B2 | motion;NOUN;B2
-myelin,myelin;NOUN; | myelin;NOUN; | myelin;NOUN;
-sensory,sensory;ADJ;
-sheath,sheath;NOUN; | sheath;NOUN;
-similar,similar;ADJ;
-Myelin,Myelin;PROPN;
-allotted,allotted;ADJ;
-frequent,frequent;ADJ;
-mastery,mastery;NOUN;B2
-mentally,mentally;ADV;
-multiple,multiple;ADJ;
-pathway,pathway;NOUN; | pathway;NOUN; | pathway;NOUN;
-physical,physical;ADJ; | physical;ADJ; | physical;ADJ;
-process,process;VERB;B2
-unravel,unravel;VERB;
-working,working;NOUN;
-airplane,airplane;NOUN;
-correctly,correctly;ADV;
-covering,covering;NOUN;
-duration,duration;NOUN;
-effective,effective;ADJ; | effective;ADJ; | effective;ADJ; | effective;ADJ; | effective;ADJ;
-efficient,efficient;ADJ;
-gradually,gradually;ADV;
-incorrect,incorrect;ADJ;
-insulate,insulate;VERB;
-intensely,intensely;ADV;
-maximize,maximize;VERB;
-meantime,meantime;NOUN;
-minimize,minimize;VERB;
-potential,potential;ADJ;
-practice,practice;VERB; | practice;VERB; | practice;VERB; | practice;VERB;
-quantify,quantify;VERB;B2
-stimulus,stimulus;NOUN;
-Facebook,Facebook;PROPN;
-attribute,attribute;VERB;B2
-consistent,consistent;ADJ;
-electrical,electrical;ADJ; | electrical;ADJ;
-individual,individual;ADJ;
-physically,physically;ADV;
-pirouette,pirouette;NOUN;
-reinforce,reinforce;VERB;B2
-substance,substance;NOUN;B2
-surprising,surprising;ADJ;
-efficiently,efficiently;ADV;
-experienced,experienced;ADJ;
-insulation,insulation;NOUN; | insulation;NOUN;
-repetition,repetition;NOUN;B2 | repetition;NOUN;B2 | repetition;NOUN;B2 | repetition;NOUN;B2 | repetition;NOUN;B2
-smartphone,smartphone;NOUN;
-distraction,distraction;NOUN;B2 | distraction;NOUN;B2
-intermediate,intermediate;ADJ;
-myelination,myelination;NOUN;
-particularly,particularly;ADV;
-coordination,coordination;NOUN;
-superhighway,superhighway;NOUN;
-effectiveness,effectiveness;NOUN;B2
-understanding,understanding;NOUN;B2
-Martin,Martin;PROPN;
-Luther,Luther;PROPN;
-Civil,Civil;PROPN;
-Rights,Rights;PROPN;
-state,state;VERB;B2
-internalize,internalize;VERB;
-manifest,manifest;VERB;
-genocide,genocide;NOUN; | genocide;NOUN;
-challenge,challenge;VERB;B2
-recognize,recognize;VERB;
-safe,safe;ADJ; | safe;ADJ;
-intimacy,intimacy;NOUN;
-core,core;ADJ;
-critically,critically;ADV;
-consciously,consciously;ADV;
-clearly,clearly;ADV;
-realize,realize;VERB; | realize;VERB;
-honest,honest;ADJ;
-catholic,catholic;ADJ;
-New,New;PROPN;
-Orleans,Orleans;PROPN;
-Lent,Lent;PROPN;
-meaningful,meaningful;ADJ;
-sacrifice,sacrifice;VERB; | sacrifice;VERB;
-typically,typically;ADV;
-indulge,indulge;VERB;B2
-God,God;PROPN;B2
-sanctity,sanctity;NOUN;
-McDonald,McDonald;PROPN;
-french,french;ADJ; | french;ADJ;
-valuable,valuable;ADJ;
-long,long;ADJ;
-ago,ago;ADV;
-instead,instead;ADV; | instead;ADV;
-conscience,conscience;NOUN;B2
-appease,appease;VERB;
-ignorance,ignorance;NOUN;B2
-unaware,unaware;ADJ;
-validation,validation;NOUN;
-endorse,endorse;VERB;B2
-Christian,Christian;PROPN; | Christian;PROPN;
-gay,gay;ADJ;
-locker,locker;NOUN;
-bolt,bolt;NOUN;B2
-homeless,homeless;ADJ; | homeless;ADJ;
-merely,merely;ADV;
-affirmation,affirmation;NOUN;
-worth,worth;ADJ;
-concerned,concerned;ADJ;
-actually,actually;ADV;
-fundraising,fundraising;NOUN;
-gala,gala;NOUN;
-proud,proud;ADJ;
-hard,hard;ADJ;
-poor,poor;ADJ;
-unintelligent,unintelligent;ADJ;
-apparently,apparently;ADV;
-dignity,dignity;NOUN;B2
-rarely,rarely;ADV;
-residue,residue;NOUN;
-flaw,flaw;NOUN;B2
-gut,gut;NOUN;
-wrench,wrench;NOUN;
-guillotine,guillotine;NOUN;
-retreat,retreat;VERB;B2
-rwandan,rwandan;ADJ;
-Katrina,Katrina;PROPN;
-noose,noose;NOUN;
-char,char;VERB;
-privilege,privilege;NOUN;B2
-indecision,indecision;NOUN;
-sanctuary,sanctuary;NOUN;
-bravery,bravery;NOUN;B2
-brilliance,brilliance;NOUN;
-human,human;ADJ;
-transcendentalism,transcendentalism;NOUN;
-Thoreau,Thoreau;PROPN;
-microphone,microphone;NOUN;B2
-tuck,tuck;VERB;
-underside,underside;NOUN;
-inhibition,inhibition;NOUN;
-soapbox,soapbox;NOUN;
+maim,maim;maimed;VERB;unknown
+sift,sift;sifting;VERB;unknown | sift;sifting;VERB;unknown
+stoic,stoic;stoic;ADJ;unknown
+tech,tech;tech;NOUN;unknown
+blobby,blobby;blobby;ADJ;unknown
+churn,churn;churn;VERB;unknown
+jedi,jedi;Jedi;PROPN;unknown
+juror,juror;jurors;NOUN;B2 | juror;jurors;NOUN;B2
+lisa,lisa;Lisa;PROPN;unknown
+wring,wring;wring;VERB;unknown
+demise,demise;demise;NOUN;unknown
+gasps,gasps;Gasps;PROPN;unknown
+boston,boston;Boston;PROPN;unknown
+culpable,culpable;culpable;ADJ;unknown
+empower,empower;empowering;VERB;unknown
+google,google;Google;PROPN;unknown
+prewire,prewire;prewired;VERB;unknown | prewire;prewired;VERB;unknown
+barrett,barrett;Barrett;PROPN;unknown
+chechen,chechen;Chechen;PROPN;unknown
+energized,energized;energized;ADJ;unknown
+feldman,feldman;Feldman;PROPN;unknown
+intrinsic,intrinsic;intrinsic;ADJ;unknown
+stoically,stoically;stoically;ADV;unknown
+boardroom,boardroom;boardroom;NOUN;unknown
+chechnya,chechnya;Chechnya;PROPN;unknown
+dehydrate,dehydrate;dehydrated;VERB;unknown
+facebook,facebook;Facebook;PROPN;unknown
+remorseless,remorseless;remorseless;ADJ;unknown
+experiential,experiential;experiential;ADJ;unknown
+wretchedness,wretchedness;wretchedness;NOUN;unknown | wretchedness;wretchedness;NOUN;unknown
+transcriber,transcriber;Transcriber;PROPN;unknown
+camille,camille;Camille;PROPN;unknown
+margaret,margaret;Margaret;PROPN;unknown
+gould,gould;Gould;PROPN;unknown
+stewart,stewart;Stewart;PROPN;unknown
+html,html;HTML;NOUN;unknown
+vannevar,vannevar;Vannevar;PROPN;unknown
+ted,ted;Ted;PROPN;unknown
+nelson,nelson;Nelson;PROPN;unknown
+xanadu,xanadu;Xanadu;PROPN;unknown
+maryland,maryland;Maryland;PROPN;unknown
+gray,gray;gray;ADJ;unknown
+hypercard,hypercard;HyperCard;PROPN;unknown | hypercard;HyperCard;PROPN;unknown
+nonlinear,nonlinear;nonlinear;ADJ;unknown
+storytelling,storytelling;storytelling;NOUN;unknown
+tim,tim;Tim;PROPN;unknown
+berners,berners;Berners;PROPN;unknown
+lee,lee;Lee;PROPN;unknown
+lego,lego;LEGO;NOUN;unknown
+millennial,millennial;millennials;NOUN;unknown | millennial;millennials;NOUN;unknown
+harvard,harvard;Harvard;PROPN;unknown | harvard;Harvard;PROPN;unknown | harvard;Harvard;PROPN;unknown
+tenement,tenement;tenements;NOUN;unknown
+bricklayer,bricklayer;bricklayers;NOUN;unknown
+states,states;States;PROPN;unknown
+schizophrenia,schizophrenia;schizophrenia;NOUN;unknown
+functioning,functioning;functioning;NOUN;unknown
+americans,americans;Americans;PROPN;unknown
+octogenarian,octogenarian;octogenarian;NOUN;unknown
+octogenarian,octogenarian;octogenarian;ADJ;unknown
+bicker,bicker;bicker;VERB;unknown
+workmate,workmate;workmates;NOUN;unknown
+liven,liven;livening;VERB;unknown
+twain,twain;Twain;PROPN;unknown
+nighter,nighter;nighters;NOUN;unknown | nighter;nighters;NOUN;unknown
+non,non;non;NOUN;unknown | non;non;NOUN;unknown | non;non;NOUN;unknown | non;non;NOUN;unknown | non;non;NOUN;unknown
+mri,mri;MRI;NOUN;unknown
+wikipedia,wikipedia;Wikipedia;PROPN;unknown
+nancy,nancy;Nancy;PROPN;unknown
+tonya,tonya;Tonya;PROPN;unknown
+harding,harding;Harding;PROPN;unknown
+youtube,youtube;YouTube;PROPN;unknown
+richard,richard;Richard;PROPN;unknown
+feynman,feynman;Feynman;PROPN;unknown
+justin,justin;Justin;PROPN;unknown
+bieber,bieber;Bieber;PROPN;unknown
+propagate,propagate;propagating;VERB;unknown
+makes,makes;Makes;PROPN;unknown
+unearned,unearned;unearned;ADJ;unknown
+india,india;India;PROPN;unknown | india;India;PROPN;unknown
+phd,phd;PhD;NOUN;unknown
+entrepreneurial,entrepreneurial;entrepreneurial;ADJ;unknown
+non,non;non;ADJ;unknown
+cram,cram;cramming;VERB;unknown
+epiphany,epiphany;epiphany;NOUN;unknown
+sneaki,sneaki;sneakiest;ADJ;unknown
+kapono,kapono;Kapono;PROPN;unknown
+hawaiian,hawaiian;Hawaiian;ADJ;unknown
+genome,genome;genome;NOUN;unknown | genome;genome;NOUN;unknown | genome;genomes;NOUN;unknown | genome;genome;NOUN;unknown | genome;genomes;NOUN;unknown | genome;genome;NOUN;unknown | genome;genome;NOUN;unknown | genome;genome;NOUN;unknown | genome;genome;NOUN;unknown
+dna,dna;DNA;NOUN;B2 | dna;DNA;NOUN;B2
+meme,meme;memes;NOUN;unknown
+facetime,facetime;FaceTime;PROPN;unknown | facetime;FaceTime;PROPN;unknown
+terabyte,terabyte;terabytes;NOUN;unknown | terabyte;terabytes;NOUN;unknown | terabyte;terabyte;NOUN;unknown | terabyte;terabytes;NOUN;unknown
+sequester,sequester;sequestering;VERB;unknown
+iot,iot;IoT;PROPN;unknown
+iphone,iphone;iPhone;PROPN;unknown
+byproduct,byproduct;byproduct;NOUN;unknown
+exponentially,exponentially;exponentially;ADV;unknown
+thermodynamic,thermodynamic;thermodynamic;ADJ;unknown
+clifford,clifford;Clifford;PROPN;unknown
+terawatt,terawatt;terawatt;NOUN;unknown
+gpu,gpu;GPUs;NOUN;unknown
+dna,dna;DNA;PROPN;B2 | dna;DNA;PROPN;B2
+daniel,daniel;Daniel;PROPN;unknown
+gibson,gibson;Gibson;PROPN;unknown
+seth,seth;Seth;PROPN;unknown
+shipman,shipman;Shipman;PROPN;unknown
+joe,joe;Joe;PROPN;unknown
+davis,davis;Davis;PROPN;unknown
+rgb,rgb;RGB;PROPN;unknown
+color,color;color;NOUN;unknown | color;color;NOUN;unknown
+cipher,cipher;ciphered;VERB;unknown
+noncoding,noncoding;noncoding;ADJ;unknown
+cipher,cipher;cipher;NOUN;unknown
+pixeled,pixeled;pixeled;ADJ;unknown
+sugarcane,sugarcane;sugarcane;NOUN;unknown | sugarcane;sugarcane;NOUN;unknown
+colonialism,colonialism;colonialism;NOUN;unknown
+american,american;American;ADJ;unknown
+hawaiian,hawaiian;Hawaiian;PROPN;unknown
+systemic,systemic;systemic;ADJ;unknown
+hawaiians,hawaiians;Hawaiians;PROPN;unknown
+decolonize,decolonize;decolonize;VERB;unknown
+fucker,fucker;fuckers;NOUN;unknown
+breadfruit,breadfruit;breadfruit;NOUN;unknown
+microbiota,microbiota;microbiota;NOUN;unknown
+reckon,reckon;reckon;VERB;B2
+mega,mega;MEGA;PROPN;unknown | mega;MEGA;PROPN;unknown
+estuary,estuary;estuary;NOUN;unknown
+destine,destine;destined;VERB;unknown
+condominium,condominium;condominium;NOUN;unknown
+marina,marina;marina;NOUN;unknown
+digitize,digitize;digitized;VERB;unknown
+hula,hula;hula;NOUN;unknown
+biodiversity,biodiversity;Biodiversity;NOUN;unknown
+influencer,influencer;influencers;NOUN;unknown
+algorithm,algorithm;algorithm;NOUN;unknown
+supercomputer,supercomputer;supercomputer;NOUN;unknown
+wrack,wrack;wracked;VERB;unknown
+eurasia,eurasia;Eurasia;PROPN;unknown
+european,european;European;ADJ;unknown
+beaked,beaked;beaked;ADJ;unknown
+popularly,popularly;popularly;ADV;unknown
+louis,louis;Louis;PROPN;unknown
+versailles,versailles;Versailles;PROPN;unknown
+europe,europe;Europe;PROPN;unknown | europe;Europe;PROPN;unknown
+turpentine,turpentine;turpentine;NOUN;unknown
+greco,greco;Greco;PROPN;unknown
+roman,roman;Roman;ADJ;unknown
+galen,galen;Galen;PROPN;unknown
+miasma,miasma;miasma;NOUN;unknown | miasma;miasma;NOUN;unknown | miasma;miasma;NOUN;unknown
+emanate,emanate;emanating;VERB;unknown
+carcass,carcass;carcasses;NOUN;unknown
+hazmat,hazmat;hazmat;NOUN;unknown
+pore,pore;pores;NOUN;unknown
+yersinia,yersinia;Yersinia;PROPN;unknown
+pestis,pestis;pestis;NOUN;unknown
+robed,robed;robed;ADJ;unknown
+getup,getup;getup;NOUN;unknown
+italy,italy;Italy;PROPN;unknown
+france,france;France;PROPN;unknown
+macabre,macabre;macabre;ADJ;unknown
+fend,fend;fend;VERB;unknown
+antidote,antidote;antidotes;NOUN;unknown
+pre,pre;pre;ADJ;unknown
+mainstay,mainstay;mainstays;NOUN;unknown
+bloodletting,bloodletting;bloodletting;NOUN;unknown
+cupping,cupping;cupping;NOUN;unknown
+heated,heated;heated;ADJ;unknown
+lymph,lymph;lymph;NOUN;unknown | lymph;lymph;NOUN;unknown
+node,node;nodes;NOUN;unknown | node;nodes;NOUN;unknown
+cautery,cautery;cautery;NOUN;unknown
+lance,lance;lancing;VERB;unknown
+pus,pus;pus;PROPN;unknown
+deter,deter;deter;VERB;unknown
+anemia,anemia;anemia;NOUN;unknown | anemia;anemia;NOUN;unknown | anemia;anemia;NOUN;unknown
+progeria,progeria;progeria;NOUN;unknown | progeria;progeria;NOUN;unknown | progeria;progeria;NOUN;unknown | progeria;progeria;NOUN;unknown
+dystrophy,dystrophy;dystrophy;NOUN;unknown | dystrophy;dystrophy;NOUN;unknown
+tay,tay;Tay;PROPN;unknown
+sachs,sachs;Sachs;PROPN;unknown
+grievous,grievous;Grievous;ADJ;unknown
+hemoglobin,hemoglobin;hemoglobin;NOUN;unknown | hemoglobin;hemoglobin;NOUN;unknown
+warhead,warhead;warhead;NOUN;unknown
+helix,helix;helix;NOUN;unknown | helix;helix;NOUN;unknown
+bacterium,bacterium;bacterium;NOUN;unknown
+snippet,snippet;snippet;NOUN;unknown
+emmanuelle,emmanuelle;Emmanuelle;PROPN;unknown
+charpentier,charpentier;Charpentier;PROPN;unknown
+george,george;George;PROPN;unknown
+jennifer,jennifer;Jennifer;PROPN;unknown
+feng,feng;Feng;PROPN;unknown
+zhang,zhang;Zhang;PROPN;unknown
+deletion,deletion;deletion;NOUN;unknown
+predominate,predominate;predominate;VERB;unknown
+nick,nick;nicking;VERB;unknown | nick;nicked;VERB;unknown | nick;nicked;VERB;unknown
+nick,nick;nick;PROPN;unknown
+alexis,alexis;Alexis;PROPN;unknown
+pathogenic,pathogenic;pathogenic;ADJ;unknown | pathogenic;pathogenic;ADJ;unknown
+nicole,nicole;Nicole;PROPN;unknown | nicole;Nicole;PROPN;unknown
+age,age;aging;VERB;unknown
+rna,rna;RNA;PROPN;unknown
+darwinian,darwinian;Darwinian;ADJ;unknown
+nicking,nicking;nicking;NOUN;unknown
+biomedical,biomedical;biomedical;PROPN;unknown
+range,range;ranging;VERB;B2
+luke,luke;Luke;PROPN;unknown
+jon,jon;Jon;PROPN;unknown
+levy,levy;Levy;PROPN;unknown
+rna,rna;RNA;NOUN;unknown
+thalassemia,thalassemia;thalassemia;NOUN;unknown
+phenylketonuria,phenylketonuria;phenylketonuria;PROPN;unknown
+congenital,congenital;congenital;ADJ;unknown
+cofounde,cofounde;cofounded;VERB;unknown
+therapeutics,therapeutics;Therapeutics;PROPN;unknown
+pairwise,pairwise;Pairwise;PROPN;unknown
+timescale,timescale;timescale;NOUN;unknown
+opt,opt;opting;VERB;unknown
+ethicist,ethicist;ethicists;NOUN;unknown
+straightforward,straightforward;straightforward;ADJ;B2
+metastasize,metastasize;metastasized;VERB;unknown | metastasize;metastasized;VERB;unknown
+esophageal,esophageal;esophageal;ADJ;unknown
+lymphatic,lymphatic;lymphatic;ADJ;unknown
+harbor,harbor;harbor;VERB;unknown
+rethink,rethink;rethink;VERB;unknown
+continuum,continuum;continuum;NOUN;unknown
+metastatic,metastatic;metastatic;ADJ;unknown
+tnm,tnm;TNM;PROPN;unknown
+sorting,sorting;sorting;NOUN;unknown
+tnm,tnm;TNM;NOUN;unknown
+intricate,intricate;intricate;ADJ;unknown
+subset,subset;subset;NOUN;unknown
+gynecological,gynecological;gynecological;ADJ;unknown
+ureter,ureter;ureters;NOUN;unknown | ureter;ureter;NOUN;unknown | ureter;ureter;NOUN;unknown | ureter;ureter;NOUN;unknown
+urethra,urethra;urethra;NOUN;unknown
+oxalate,oxalate;oxalate;NOUN;unknown | oxalate;oxalate;NOUN;unknown | oxalate;oxalate;NOUN;unknown | oxalate;oxalate;NOUN;unknown | oxalate;oxalate;NOUN;unknown
+uric,uric;uric;ADJ;unknown | uric;uric;ADJ;unknown
+phosphate,phosphate;phosphate;NOUN;unknown | phosphate;phosphate;NOUN;unknown | phosphate;phosphate;NOUN;unknown
+crystallize,crystallize;crystallize;VERB;unknown
+ammonium,ammonium;ammonium;NOUN;unknown
+struvite,struvite;struvite;NOUN;unknown
+embed,embed;embedded;VERB;unknown
+citrate,citrate;citrate;NOUN;unknown
+pulverize,pulverize;pulverizing;VERB;unknown
+soundwave,soundwave;soundwaves;NOUN;unknown
+extracorporeal,extracorporeal;Extracorporeal;ADJ;unknown
+lithotripsy,lithotripsy;lithotripsy;NOUN;unknown
+focused,focused;focused;ADJ;unknown
+jostle,jostle;jostle;VERB;unknown
+stent,stent;stent;NOUN;unknown
+fiber,fiber;fibers;NOUN;unknown
+rhubarb,rhubarb;rhubarb;NOUN;unknown
+beet,beet;beets;NOUN;unknown
+chili,chili;chili;NOUN;unknown
+cuticle,cuticle;cuticles;NOUN;unknown
+envision,envision;envisioning;VERB;unknown
+biter,biter;biters;NOUN;unknown
+ingrain,ingrain;ingrained;VERB;unknown
+curb,curb;curbing;VERB;unknown
+dopamine,dopamine;dopamine;NOUN;unknown | dopamine;Dopamine;NOUN;unknown
+neurotransmitter,neurotransmitter;neurotransmitter;NOUN;unknown
+neuroplasticity,neuroplasticity;neuroplasticity;NOUN;unknown
+outpace,outpace;outpacing;VERB;unknown
+sugary,sugary;sugary;ADJ;unknown
+detrimental,detrimental;detrimental;ADJ;unknown
+preemptively,preemptively;preemptively;ADV;unknown
+christan,christan;Christan;PROPN;unknown
+hansen,hansen;Hansen;PROPN;unknown
+adam,adam;Adam;PROPN;unknown
+roastery,roastery;roastery;NOUN;unknown
+smartphone,smartphone;smartphone;NOUN;unknown | smartphone;smartphone;NOUN;unknown
+playing,playing;playing;NOUN;unknown
+arizona,arizona;Arizona;PROPN;unknown
+scarcity,scarcity;scarcity;NOUN;unknown
+nuance,nuance;nuance;NOUN;unknown | nuance;nuance;NOUN;unknown
+asl,asl;ASL;NOUN;unknown
+english,english;English;PROPN;unknown | english;English;PROPN;unknown
+asl,asl;ASL;PROPN;unknown
+bidirectional,bidirectional;bidirectional;ADJ;unknown
+sophie,sophie;Sophie;PROPN;unknown | sophie;Sophie;PROPN;unknown
+greek,greek;Greek;ADJ;unknown
+pericles,pericles;Pericles;PROPN;unknown
+constantine,constantine;Constantine;PROPN;unknown
+dinos,dinos;Dinos;PROPN;unknown
+berklee,berklee;Berklee;PROPN;unknown
+watson,watson;Watson;PROPN;unknown | watson;Watson;PROPN;unknown
+oftentimes,oftentimes;oftentimes;ADV;unknown
+adele,adele;Adele;PROPN;unknown | adele;Adele;PROPN;unknown
+nevermind,nevermind;Nevermind;INTJ;unknown | nevermind;Nevermind;INTJ;unknown
+nevermind,nevermind;Nevermind;ADV;unknown
+nevermind,nevermind;Nevermind;ADJ;unknown
+snickers,snickers;Snickers;PROPN;unknown | snickers;Snickers;PROPN;unknown | snickers;Snickers;PROPN;unknown | snickers;Snickers;PROPN;unknown | snickers;Snickers;PROPN;unknown | snickers;Snickers;PROPN;unknown
+despondent,despondent;despondent;ADJ;unknown
+songwriting,songwriting;songwriting;NOUN;unknown
+reengage,reengage;reengaged;VERB;unknown
+habituate,habituate;habituate;VERB;unknown | habituate;habituated;VERB;unknown
+melodic,melodic;melodic;ADJ;unknown
+cortisol,cortisol;cortisol;NOUN;unknown
+jowl,jowl;jowls;NOUN;unknown
+horrifyingly,horrifyingly;horrifyingly;ADJ;unknown
+crepe,crepe;crepe;NOUN;unknown | crepe;Crepe;NOUN;unknown
+alright,alright;Alright;INTJ;unknown
+crepe,crepe;Crepe;PROPN;unknown
+crepe,crepe;crepe;ADJ;unknown
+diane,diane;Diane;PROPN;unknown
+keaton,keaton;Keaton;PROPN;unknown
+aging,aging;aging;NOUN;unknown
+aarp,aarp;AARP;PROPN;unknown
+mastectomy,mastectomy;mastectomy;NOUN;unknown
+chemo,chemo;chemo;NOUN;unknown
+texte,texte;texted;VERB;unknown | texte;texted;VERB;unknown
+susan,susan;Susan;PROPN;unknown
+cattaneo,cattaneo;Cattaneo;PROPN;unknown
+transmute,transmute;transmute;VERB;unknown
+neighbor,neighbor;neighbors;NOUN;unknown
+sakha,sakha;Sakha;PROPN;unknown | sakha;Sakha;PROPN;unknown | sakha;Sakha;PROPN;unknown | sakha;Sakha;PROPN;unknown | sakha;Sakha;PROPN;unknown
+siberia,siberia;Siberia;PROPN;unknown
+fahrenheit,fahrenheit;Fahrenheit;PROPN;unknown
+brrr,brrr;Brrr;INTJ;unknown
+elie,elie;elie;PROPN;unknown
+elie,elie;elie;NOUN;unknown
+loon,loon;loon;NOUN;unknown | loon;loon;NOUN;unknown
+ehe,ehe;ehe;INTJ;unknown
+taba,taba;taba;PROPN;unknown
+tundra,tundra;tundra;NOUN;unknown
+sara,sara;Sara;PROPN;unknown | sara;Sara;PROPN;unknown | sara;Sara;PROPN;unknown | sara;Sara;PROPN;unknown | sara;Sara;PROPN;unknown | sara;Sara;PROPN;unknown
+imma,imma;imma;PROPN;unknown | imma;imma;PROPN;unknown | imma;imma;PROPN;unknown | imma;imma;PROPN;unknown | imma;imma;PROPN;unknown | imma;imma;PROPN;unknown | imma;imma;PROPN;unknown | imma;Imma;PROPN;unknown | imma;imma;PROPN;unknown | imma;imma;PROPN;unknown | imma;imma;PROPN;unknown | imma;imma;PROPN;unknown | imma;imma;PROPN;unknown | imma;imma;PROPN;unknown | imma;imma;PROPN;unknown | imma;imma;PROPN;unknown
+fashionista,fashionista;fashionista;NOUN;unknown
+tokyo,tokyo;Tokyo;PROPN;unknown | tokyo;Tokyo;PROPN;unknown | tokyo;Tokyo;PROPN;unknown | tokyo;Tokyo;PROPN;unknown | tokyo;Tokyo;PROPN;unknown
+instagram,instagram;Instagram;PROPN;unknown | instagram;Instagram;PROPN;unknown | instagram;Instagram;PROPN;unknown | instagram;Instagram;PROPN;unknown
+zinn,zinn;Zinn;PROPN;unknown
+einstein,einstein;Einstein;PROPN;unknown
+yakitori,yakitori;yakitori;NOUN;unknown
+yep,yep;Yep;INTJ;unknown | yep;Yep;INTJ;unknown
+cgi,cgi;CGI;PROPN;unknown
+maya,maya;Maya;PROPN;unknown
+hashtag,hashtag;hashtag;NOUN;unknown
+cgi,cgi;CGI;NOUN;unknown
+autonomous,autonomous;autonomous;ADJ;unknown
+imma,imma;imma;ADJ;unknown | imma;imma;ADJ;unknown | imma;imma;ADJ;unknown
+giusto,giusto;Giusto;PROPN;unknown
+japanese,japanese;Japanese;ADJ;unknown
+forbes,forbes;Forbes;PROPN;unknown
+greta,greta;Greta;PROPN;unknown
+michelle,michelle;Michelle;PROPN;unknown
+obama,obama;Obama;PROPN;unknown
+paralympics,paralympics;Paralympics;PROPN;unknown
+closing,closing;closing;NOUN;unknown
+cambodia,cambodia;Cambodia;PROPN;unknown
+amazon,amazon;Amazon;PROPN;unknown
+porsche,porsche;Porsche;PROPN;unknown
+bmw,bmw;BMW;PROPN;unknown
+ikea,ikea;IKEA;PROPN;unknown
+lil,lil;Lil;PROPN;unknown
+nas,nas;Nas;PROPN;unknown
+harper,harper;Harper;PROPN;unknown
+bazaar,bazaar;Bazaar;PROPN;unknown
+voce,voce;Voce;PROPN;unknown
+gen,gen;Gen;PROPN;unknown | gen;Gen;PROPN;unknown | gen;Gen;PROPN;unknown
+kylie,kylie;Kylie;PROPN;unknown
+jenner,jenner;Jenner;PROPN;unknown
+anyways,anyways;anyways;ADV;unknown | anyways;Anyways;ADV;unknown | anyways;anyways;ADV;unknown | anyways;anyways;ADV;unknown
+heck,heck;heck;NOUN;unknown
+siri,siri;Siri;PROPN;unknown
+celsius,celsius;Celsius;NOUN;unknown
+innately,innately;innately;ADV;unknown
+konnichiwa,konnichiwa;Konnichiwa;PROPN;unknown | konnichiwa;Konnichiwa;PROPN;unknown
+vancouver,vancouver;Vancouver;NOUN;unknown
+celsius,celsius;Celsius;PROPN;unknown
+dystopian,dystopian;dystopian;ADJ;unknown
+singapore,singapore;Singapore;PROPN;unknown | singapore;Singapore;PROPN;unknown | singapore;Singapore;PROPN;unknown | singapore;Singapore;PROPN;unknown | singapore;Singapore;PROPN;unknown | singapore;Singapore;PROPN;unknown | singapore;Singapore;PROPN;unknown | singapore;Singapore;PROPN;unknown | singapore;Singapore;PROPN;unknown | singapore;Singapore;PROPN;unknown | singapore;Singapore;PROPN;unknown | singapore;Singapore;PROPN;unknown | singapore;Singapore;PROPN;unknown | singapore;Singapore;PROPN;unknown | singapore;Singapore;PROPN;unknown | singapore;Singapore;PROPN;unknown | singapore;Singapore;PROPN;unknown | singapore;Singapore;PROPN;unknown | singapore;Singapore;PROPN;unknown | singapore;Singapore;PROPN;unknown | singapore;Singapore;PROPN;unknown | singapore;Singapore;PROPN;unknown | singapore;Singapore;PROPN;unknown | singapore;Singapore;PROPN;unknown | singapore;Singapore;PROPN;unknown | singapore;Singapore;PROPN;unknown | singapore;Singapore;PROPN;unknown | singapore;Singapore;PROPN;unknown | singapore;Singapore;PROPN;unknown | singapore;Singapore;PROPN;unknown | singapore;Singapore;PROPN;unknown | singapore;Singapore;PROPN;unknown | singapore;Singapore;PROPN;unknown | singapore;Singapore;PROPN;unknown
+sunbird,sunbird;sunbirds;NOUN;unknown
+flit,flit;flitting;VERB;unknown
+hornbill,hornbill;hornbills;NOUN;unknown | hornbill;hornbills;NOUN;unknown | hornbill;hornbills;NOUN;unknown
+sumatran,sumatran;Sumatran;PROPN;unknown
+dragons,dragons;dragons;PROPN;unknown
+reticulated,reticulated;reticulated;ADJ;unknown
+ntu,ntu;NTU;PROPN;unknown
+pangolin,pangolin;pangolin;NOUN;unknown
+yale,yale;Yale;PROPN;unknown | yale;Yale;PROPN;unknown
+nus,nus;NUS;PROPN;unknown | nus;NUS;PROPN;unknown
+parakeet,parakeet;parakeet;NOUN;unknown | parakeet;parakeet;NOUN;unknown
+fantastical,fantastical;fantastical;ADJ;unknown
+bishan,bishan;Bishan;PROPN;unknown | bishan;Bishan;PROPN;unknown | bishan;Bishan;PROPN;unknown
+brood,brood;brood;NOUN;unknown | brood;brood;NOUN;unknown | brood;brood;NOUN;unknown
+communal,communal;communal;ADJ;unknown
+latrine,latrine;latrine;NOUN;unknown | latrine;latrine;NOUN;unknown
+upriver,upriver;upriver;ADV;unknown
+yearling,yearling;yearling;NOUN;unknown
+haw,haw;Haw;PROPN;unknown | haw;Haw;PROPN;unknown
+par,par;Par;PROPN;unknown | par;Par;PROPN;unknown
+villa,villa;Villa;PROPN;B2 | villa;Villa;PROPN;B2
+chinese,chinese;Chinese;ADJ;unknown
+industrialize,industrialize;industrialize;VERB;unknown
+stank,stank;stank;VERB;unknown
+enact,enact;enacted;VERB;unknown | enact;enacted;VERB;unknown
+trough,trough;troughs;NOUN;unknown
+frill,frill;frill;NOUN;unknown | frill;frill;NOUN;unknown
+berth,berth;berth;NOUN;unknown
+herding,herding;herding;NOUN;unknown
+corral,corral;corralling;VERB;unknown
+birder,birder;birders;NOUN;unknown
+birding,birding;birding;NOUN;unknown
+densely,densely;densely;ADV;B2
+populated,populated;populated;ADJ;unknown
+ember,ember;ember;NOUN;unknown
+los,los;Los;PROPN;unknown
+angeles,angeles;Angeles;PROPN;unknown
+mumbai,mumbai;Mumbai;PROPN;unknown
+tucson,tucson;Tucson;PROPN;unknown
+proximity,proximity;proximity;NOUN;B2
+singa,singa;Singa;PROPN;unknown
+pura,pura;Pura;PROPN;unknown
+merlion,merlion;merlion;NOUN;unknown
+mammalian,mammalian;mammalian;ADJ;unknown
+jackrabbit,jackrabbit;jackrabbit;NOUN;unknown
+americas,americas;Americas;PROPN;unknown
+cactus,cactus;cacti;NOUN;unknown | cactus;cacti;NOUN;unknown
+suited,suited;suited;ADJ;unknown
+plummet,plummet;plummet;VERB;unknown
+cuba,cuba;Cuba;PROPN;unknown
+mexico,mexico;Mexico;PROPN;unknown
+brazil,brazil;Brazil;PROPN;unknown
+peru,peru;Peru;PROPN;unknown
+cacti,cacti;cacti;VERB;unknown
+waxy,waxy;waxy;ADJ;unknown
+stoma,stoma;stomata;NOUN;unknown | stoma;stomata;NOUN;unknown
+america,america;America;PROPN;unknown
+sonoran,sonoran;Sonoran;PROPN;unknown
+saguaro,saguaro;Saguaro;PROPN;unknown | saguaro;Saguaro;PROPN;unknown | saguaro;Saguaro;PROPN;unknown
+laterally,laterally;laterally;ADV;unknown
+taproot,taproot;taproot;NOUN;unknown
+ephemeral,ephemeral;ephemeral;ADJ;unknown
+mucilage,mucilage;mucilage;NOUN;unknown
+gluey,gluey;gluey;ADJ;unknown
+cacti,cacti;cacti;PROPN;unknown
+equip,equip;equipped;VERB;B2
+swedish,swedish;Swedish;ADJ;unknown
+botanist,botanist;botanist;NOUN;unknown
+carolus,carolus;Carolus;PROPN;unknown
+linnaeus,linnaeus;Linnaeus;PROPN;unknown | linnaeus;Linnaeus;PROPN;unknown
+unfurl,unfurl;unfurl;VERB;unknown
+innate,innate;innate;ADJ;B2
+circadian,circadian;circadian;ADJ;unknown | circadian;Circadian;ADJ;unknown | circadian;Circadian;ADJ;unknown | circadian;circadian;ADJ;unknown
+sensing,sensing;sensing;NOUN;unknown
+discern,discern;discern;VERB;unknown
+mrna,mrna;mRNA;PROPN;unknown
+photosynthesizing,photosynthesizing;photosynthesizing;ADJ;unknown
+polymer,polymer;polymers;NOUN;unknown
+pollinator,pollinator;pollinators;NOUN;unknown
+oscillation,oscillation;oscillations;NOUN;unknown | oscillation;oscillations;NOUN;unknown
+stockholm,stockholm;Stockholm;PROPN;unknown | stockholm;Stockholm;PROPN;unknown
+hotels,hotels;Hotels;PROPN;unknown
+bombard,bombard;bombarded;VERB;unknown | bombard;bombarded;VERB;unknown
+alain,alain;Alain;PROPN;unknown
+botton,botton;Botton;PROPN;unknown
+mediocrity,mediocrity;mediocrity;NOUN;unknown | mediocrity;mediocrity;NOUN;unknown | mediocrity;mediocrity;NOUN;unknown | mediocrity;mediocrity;NOUN;unknown | mediocrity;mediocrity;NOUN;unknown | mediocrity;mediocrity;NOUN;unknown | mediocrity;mediocrity;NOUN;unknown
+connotation,connotation;connotations;NOUN;unknown
+sociolinguist,sociolinguist;sociolinguist;NOUN;unknown | sociolinguist;sociolinguist;NOUN;unknown
+mediocre,mediocre;mediocre;ADJ;B2
+indo,indo;Indo;PROPN;unknown
+medial,medial;medial;ADJ;unknown
+middling,middling;middling;ADJ;unknown
+unexceptional,unexceptional;unexceptional;ADJ;unknown | unexceptional;unexceptional;ADJ;unknown
+averageness,averageness;averageness;NOUN;unknown | averageness;averageness;NOUN;unknown
+ordinariness,ordinariness;ordinariness;NOUN;unknown
+surreptitious,surreptitious;surreptitious;ADJ;unknown
+denmark,denmark;Denmark;PROPN;unknown | denmark;Denmark;PROPN;unknown
+seattle,seattle;Seattle;PROPN;unknown
+switzerland,switzerland;Switzerland;PROPN;unknown | switzerland;Switzerland;PROPN;unknown | switzerland;Switzerland;PROPN;unknown
+bern,bern;Bern;PROPN;unknown
+poland,poland;Poland;PROPN;unknown | poland;Poland;PROPN;unknown
+ubiquitous,ubiquitous;ubiquitous;ADJ;unknown
+eliteness,eliteness;eliteness;NOUN;unknown
+marketer,marketer;marketers;NOUN;unknown
+banal,banal;banal;ADJ;unknown
+sweden,sweden;Sweden;PROPN;unknown
+spain,spain;Spain;PROPN;unknown
+australia,australia;Australia;PROPN;unknown
+zealand,zealand;Zealand;PROPN;unknown
+pierre,pierre;Pierre;PROPN;unknown
+bourdieu,bourdieu;Bourdieu;PROPN;unknown
+invariably,invariably;invariably;ADV;B2
+martin,martin;Martin;PROPN;unknown
+luther,luther;Luther;PROPN;unknown
+rights,rights;Rights;PROPN;unknown
+internalize,internalize;internalized;VERB;unknown
+orleans,orleans;Orleans;PROPN;unknown
+sanctity,sanctity;sanctity;NOUN;unknown
+mcdonald,mcdonald;McDonald;PROPN;unknown
+french,french;French;ADJ;unknown | french;French;ADJ;unknown
+christian,christian;Christian;PROPN;unknown | christian;Christian;PROPN;unknown
+gala,gala;gala;NOUN;unknown
+unintelligent,unintelligent;unintelligent;ADJ;unknown
+guillotine,guillotine;guillotine;NOUN;unknown
+rwandan,rwandan;Rwandan;ADJ;unknown
+katrina,katrina;Katrina;PROPN;unknown
+noose,noose;noose;NOUN;unknown
+char,char;charring;VERB;unknown
+indecision,indecision;indecision;NOUN;unknown
+transcendentalism,transcendentalism;transcendentalism;NOUN;unknown
+thoreau,thoreau;Thoreau;PROPN;unknown
+pirouette,pirouette;pirouette;NOUN;unknown
+neural,neural;neural;ADJ;unknown | neural;neural;ADJ;unknown | neural;neural;ADJ;unknown | neural;neural;ADJ;unknown
+stimulus,stimulus;stimuli;NOUN;unknown
+axon,axon;axons;NOUN;unknown | axon;axons;NOUN;unknown | axon;axons;NOUN;unknown | axon;axon;NOUN;unknown
+myelin,myelin;myelin;NOUN;unknown | myelin;myelin;NOUN;unknown | myelin;myelin;NOUN;unknown
+myelin,myelin;Myelin;PROPN;unknown
+superhighway,superhighway;superhighway;NOUN;unknown
+myelination,myelination;myelination;NOUN;unknown
+allotted,allotted;allotted;ADJ;unknown
+unravel,unravel;unraveling;VERB;unknown
